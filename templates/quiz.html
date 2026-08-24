@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Knowledge Quiz{% endblock %}
+{% block page_title %}Knowledge quiz{% endblock %}
+{% block page_sub %}10 questions · check your readiness for the Learner Simulator{% endblock %}
+
+{% block content %}
+<div class="card quiz-card" id="quiz-root">
+  <div class="quiz-progress">
+    <span id="quiz-progress-label">Question 1 of 10</span>
+    <span id="quiz-progress-score">Score: 0</span>
+  </div>
+  <div class="quiz-progress-track"><div class="quiz-progress-fill" id="quiz-progress-fill" style="width:10%;"></div></div>
+
+  <div id="quiz-question-view">
+    <p class="quiz-question" id="quiz-question-text"></p>
+    <ul class="quiz-options" id="quiz-options" role="radiogroup" aria-labelledby="quiz-question-text"></ul>
+    <div class="quiz-feedback" id="quiz-feedback" role="status" aria-live="polite" hidden>
+      <div class="quiz-feedback-title" id="quiz-feedback-title"></div>
+      <div id="quiz-feedback-explanation"></div>
+    </div>
+    <div class="quiz-nav">
+      <button class="btn btn-primary" id="quiz-next-btn" disabled>Next question</button>
+    </div>
+  </div>
+
+  <div id="quiz-result-view" class="quiz-result" hidden aria-live="polite">
+    <p class="eyebrow">Final score</p>
+    <div class="quiz-score" id="quiz-final-score">0 / 10</div>
+    <span class="quiz-classification" id="quiz-classification"></span>
+    <p id="quiz-classification-note" style="max-width:44ch; margin:1rem auto;"></p>
+    <div style="display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap;">
+      <button class="btn" id="quiz-retry-btn">Retake quiz</button>
+      <a class="btn" href="/learn">Back to Learn</a>
+      <a class="btn btn-primary" id="quiz-simulator-link" href="/learn/simulator">Go to Learner Simulator →</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/quiz.js"></script>
+{% endblock %}

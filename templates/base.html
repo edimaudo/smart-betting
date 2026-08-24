@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-font-size="medium">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Smart Betting{% endblock %} · Smart Betting</title>
+  <meta name="description" content="Sports betting education, analytics, simulation, and decision support.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script>
+    /* Apply persisted theme/font-size before paint to avoid a flash. */
+    (function () {
+      try {
+        var theme = localStorage.getItem('sb-theme') || 'dark';
+        var fontSize = localStorage.getItem('sb-font-size') || 'medium';
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.setAttribute('data-font-size', fontSize);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <div class="app-shell">
+    <nav class="sidebar" id="sidebar" aria-label="Primary">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>
+          <span class="brand-name" style="display:block;">Smart Betting</span>
+          <span class="brand-tag">DECISION SUPPORT</span>
+        </span>
+      </a>
+
+      <ul class="nav-list">
+        <li><a class="nav-link" href="/" data-nav="overview"><span class="nav-index">01</span>Overview</a></li>
+        <li><a class="nav-link" href="/learn" data-nav="learn"><span class="nav-index">02</span>Learn</a></li>
+        <li><a class="nav-link" href="/markets" data-nav="markets"><span class="nav-index">03</span>Markets</a></li>
+        <li><a class="nav-link" href="/history" data-nav="history"><span class="nav-index">04</span>History</a></li>
+        <li><a class="nav-link" href="/analyze" data-nav="analyze"><span class="nav-index">05</span>Analyze</a></li>
+        <li><a class="nav-link" href="/strategies" data-nav="strategies"><span class="nav-index">06</span>Strategies</a></li>
+        <li><a class="nav-link" href="/simulate" data-nav="simulate"><span class="nav-index">07</span>Simulate</a></li>
+        <li><a class="nav-link" href="/decide" data-nav="decide"><span class="nav-index">08</span>Decide</a></li>
+      </ul>
+
+      <p class="sidebar-footer">
+        Decision-support tool. Not a guarantee of outcomes. Betting involves financial risk — see
+        <a href="/learn#upsides-downsides">Learn → Risks</a>.
+      </p>
+    </nav>
+
+    <div class="main-col">
+      <header class="topbar">
+        <div style="display:flex; align-items:center; gap:0.75rem;">
+          <button class="mobile-nav-toggle" id="navToggle" aria-expanded="false" aria-controls="sidebar" aria-label="Open navigation menu">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M2 4.5H16M2 9H16M2 13.5H16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+          <div class="topbar-title">
+            <h1>{% block page_title %}Overview{% endblock %}</h1>
+            <span>{% block page_sub %}Structured, evidence-based betting decisions{% endblock %}</span>
+          </div>
+        </div>
+
+        <div class="topbar-controls">
+          <div class="control-group" role="group" aria-label="Font size">
+            <button class="control-btn" data-font="small" aria-pressed="false" aria-label="Small text">A-</button>
+            <button class="control-btn" data-font="medium" aria-pressed="true" aria-label="Medium text">A</button>
+            <button class="control-btn" data-font="large" aria-pressed="false" aria-label="Large text">A+</button>
+          </div>
+          <div class="control-group" role="group" aria-label="Theme">
+            <button class="control-btn" data-theme-btn="dark" aria-pressed="true" aria-label="Dark theme">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M14 9.1A6 6 0 116.9 2 4.8 4.8 0 0014 9.1z" stroke="currentColor" stroke-width="1.3"/></svg>
+            </button>
+            <button class="control-btn" data-theme-btn="light" aria-pressed="false" aria-label="Light theme">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.3"/><path d="M8 1v1.6M8 13.4V15M15 8h-1.6M2.6 8H1M12.7 3.3l-1.1 1.1M4.4 11.6l-1.1 1.1M12.7 12.7l-1.1-1.1M4.4 4.4L3.3 3.3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="main-content" tabindex="-1">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <div id="navScrim" hidden style="position:fixed; inset:0; z-index:20;"></div>
+
+  <script src="/static/js/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

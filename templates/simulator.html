@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Learner Simulator{% endblock %}
+{% block page_title %}Learner simulator{% endblock %}
+{% block page_sub %}Practice interpreting realistic scenarios · no real money involved{% endblock %}
+
+{% block content %}
+<div class="page-lede">
+  <p>Work through each scenario, enter your own estimates, then reveal the calculations. This is educational only — nothing here places a real wager.</p>
+</div>
+
+<div class="card scenario-card" id="sim-root">
+  <p class="eyebrow" id="sim-progress">Scenario 1 of 5</p>
+
+  <div class="scenario-context" id="sim-context"></div>
+
+  <div class="stat-row" style="margin-bottom:1rem;">
+    <div class="stat"><span class="stat-label">Market</span><span class="stat-value mono" id="sim-market"></span></div>
+    <div class="stat"><span class="stat-label">Selection</span><span class="stat-value mono" id="sim-selection"></span></div>
+    <div class="stat"><span class="stat-label">Odds (American)</span><span class="stat-value mono" id="sim-odds"></span></div>
+    <div class="stat"><span class="stat-label">Stake</span><span class="stat-value mono" id="sim-stake"></span></div>
+  </div>
+
+  <form id="sim-form">
+    <div class="scenario-inputs">
+      <div class="field">
+        <label for="sim-implied">Your implied probability (%)</label>
+        <input type="number" id="sim-implied" min="0" max="100" step="0.1" required>
+      </div>
+      <div class="field">
+        <label for="sim-payout">Potential payout ($, total)</label>
+        <input type="number" id="sim-payout" min="0" step="0.01" required>
+      </div>
+      <div class="field">
+        <label for="sim-edge">Estimated edge (%)</label>
+        <input type="number" id="sim-edge" step="0.1" required>
+      </div>
+      <div class="field">
+        <label for="sim-ev">Expected value ($, per bet)</label>
+        <input type="number" id="sim-ev" step="0.01" required>
+      </div>
+    </div>
+
+    <div class="field" style="margin-bottom:1rem;">
+      <label id="sim-attractive-label">Does this bet appear attractive?</label>
+      <div role="radiogroup" aria-labelledby="sim-attractive-label" style="display:flex; gap:0.5rem;">
+        <button type="button" class="quiz-option" data-attractive="yes" aria-pressed="false" style="width:auto; min-height:40px;">Yes</button>
+        <button type="button" class="quiz-option" data-attractive="no" aria-pressed="false" style="width:auto; min-height:40px;">No</button>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" type="submit">Reveal calculations</button>
+  </form>
+
+  <div class="scenario-reveal" id="sim-reveal" aria-live="polite">
+    <div class="stat-row" style="margin-bottom:1rem;">
+      <div class="stat"><span class="stat-label">Implied probability</span><span class="stat-value mono" id="reveal-implied"></span></div>
+      <div class="stat"><span class="stat-label">Model probability</span><span class="stat-value mono" id="reveal-model"></span></div>
+      <div class="stat"><span class="stat-label">Edge</span><span class="stat-value mono" id="reveal-edge"></span></div>
+      <div class="stat"><span class="stat-label">Expected value</span><span class="stat-value mono" id="reveal-ev"></span></div>
+      <div class="stat"><span class="stat-label">Payout if win</span><span class="stat-value mono" id="reveal-payout"></span></div>
+    </div>
+    <p id="reveal-verdict" style="font-weight:600;"></p>
+    <p id="reveal-explanation"></p>
+    <p class="eyebrow">Simulated outcome (for illustration only)</p>
+    <p id="reveal-outcome"></p>
+    <div class="quiz-nav">
+      <button class="btn" id="sim-restart-btn" type="button">Restart</button>
+      <button class="btn btn-primary" id="sim-next-btn" type="button">Next scenario →</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/simulator.js"></script>
+{% endblock %}

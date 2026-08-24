@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Strategies{% endblock %}
+{% block page_title %}Strategies{% endblock %}
+{% block page_sub %}Configurable rules for what counts as an opportunity{% endblock %}
+
+{% block content %}
+<div class="page-lede">
+  <p>A strategy is a set of thresholds — minimum edge, minimum expected value, minimum model confidence — that an opportunity must clear before it's worth a closer look. This page scans upcoming moneyline markets against the selected strategy.</p>
+</div>
+
+<form class="filter-bar" method="get" action="/strategies">
+  <div class="field" style="min-width:220px;">
+    <label for="st-strategy">Strategy</label>
+    <select id="st-strategy" name="strategy_id" onchange="this.form.submit()">
+      {% for s in strategies %}
+      <option value="{{ s.id }}" {% if filters.strategy_id==s.id %}selected{% endif %}>{{ s.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="st-model">Model</label>
+    <select id="st-model" name="model" onchange="this.form.submit()">
+      {% for key, m in models.items() %}
+      <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="st-sport">Sport</label>
+    <select id="st-sport" name="sport" onchange="this.form.submit()">
+      <option value="">All sports</option>
+      <option value="nba" {% if filters.sport=='nba' %}selected{% endif %}>Basketball (NBA)</option>
+      <option value="nfl" {% if filters.sport=='nfl' %}selected{% endif %}>Football (NFL)</option>
+      <option value="epl" {% if filters.sport=='epl' %}selected{% endif %}>Soccer (EPL)</option>
+    </select>
+  </div>
+  <button class="btn" type="submit">Rescan</button>
+</form>
+
+<div class="card" style="margin-bottom:1.25rem;">
+  <div class="section-head">
+    <h3 style="margin:0;">{{ active_strategy.name }}</h3>
+    <span class="eyebrow">Active strategy</span>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label">Min. edge</span><span class="stat-value">{{ '%.0f'|format(active_strategy.min_edge*100) }}%</span></div>
+    <div class="stat"><span class="stat-label">Min. expected value</span><span class="stat-value">{{ '%.0f'|format(active_strategy.min_ev*100) }}%</span></div>
+    <div class="stat"><span class="stat-label">Min. confidence</span><span class="stat-value">{{ '%.0f'|format(active_strategy.min_confidence*100) }}%</span></div>
+    <div class="stat"><span class="stat-label">Max stake (units)</span><span class="stat-value">{{ active_strategy.max_stake_units }}</span></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-head">
+    <h2>Scan summary</h2>
+  </div>
+  <div class="stat-row" style="margin-bottom:1.5rem;">
+    <div class="stat"><span class="stat-label">Strong candidate</span><span class="stat-value positive">{{ counts.get('Strong Candidate', 0) }}</span></div>
+    <div class="stat"><span class="stat-label">Candidate</span><span class="stat-value">{{ counts.get('Candidate', 0) }}</span></div>
+    <div class="stat"><span class="stat-label">Weak candidate</span><span class="stat-value">{{ counts.get('Weak Candidate', 0) }}</span></div>
+    <div class="stat"><span class="stat-label">Pass</span><span class="stat-value negative">{{ counts.get('Pass', 0) }}</span></div>
+    <div class="stat"><span class="stat-label">Insufficient data</span><span class="stat-value">{{ counts.get('Insufficient Data', 0) }}</span></div>
+  </div>
+
+  {% if not scanned %}
+  <div class="empty-state">No opportunities currently meet this strategy's minimum bar. Try a less restrictive strategy, or check back as markets move.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Event</th><th>Selection</th><th class="num">Edge</th><th class="num">EV</th><th class="num">Confidence</th><th>Classification</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in scanned %}
+        <tr>
+          <td>{{ row.event.away_team_name }} @ {{ row.event.home_team_name }}</td>
+          <td>{{ row.selection.name }}</td>
+          <td class="num {{ 'positive' if row.result.edge > 0 else 'negative' }}">{{ '%+.1f'|format(row.result.edge*100) }}%</td>
+          <td class="num {{ 'positive' if row.result.expected_value_per_unit > 0 else 'negative' }}">{{ '%+.1f'|format(row.result.expected_value_per_unit*100) }}%</td>
+          <td class="num">{{ '%.0f'|format(row.result.model_confidence*100) }}%</td>
+          <td>
+            {% if row.decision.classification.value == 'Strong Candidate' %}<span class="badge badge-signal">Strong</span>
+            {% elif row.decision.classification.value == 'Candidate' %}<span class="badge badge-info">Candidate</span>
+            {% else %}<span class="badge badge-warn">Weak</span>{% endif %}
+          </td>
+          <td><a class="btn" style="min-height:32px; padding:0.35rem 0.7rem;" href="/decide?event={{ row.event.id }}&selection={{ row.selection.id }}&sport={{ row.event.sport_id }}&strategy_id={{ active_strategy.id }}&model={{ filters.model }}">Decide →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

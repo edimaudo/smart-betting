@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}History{% endblock %}
+{% block page_title %}Data history{% endblock %}
+{% block page_sub %}Resolved events with closing prices and outcomes{% endblock %}
+
+{% block content %}
+<div class="page-lede">
+  <p>Historical odds and outcomes preserve their original timestamps so they can be used for backtesting without look-ahead bias — see <a href="/simulate">Simulate</a> to run a strategy against this dataset.</p>
+</div>
+
+<form class="filter-bar" method="get" action="/history">
+  <div class="field">
+    <label for="h-sport">Sport</label>
+    <select id="h-sport" name="sport" onchange="this.form.submit()">
+      <option value="">All sports</option>
+      {% for s in sports %}
+      <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="h-season">Season</label>
+    <select id="h-season" name="season" onchange="this.form.submit()">
+      <option value="">All seasons</option>
+      {% for yr in seasons %}
+      <option value="{{ yr }}" {% if filters.season==yr %}selected{% endif %}>{{ yr }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="h-from">From</label>
+    <input type="date" id="h-from" name="date_from" value="{{ filters.date_from or '' }}" onchange="this.form.submit()">
+  </div>
+  <div class="field">
+    <label for="h-to">To</label>
+    <input type="date" id="h-to" name="date_to" value="{{ filters.date_to or '' }}" onchange="this.form.submit()">
+  </div>
+  <div class="field" style="flex:1; min-width:160px;">
+    <label for="h-team">Team</label>
+    <input type="text" id="h-team" name="team" placeholder="Search team name…" value="{{ filters.team }}">
+  </div>
+  <button class="btn" type="submit">Apply</button>
+</form>
+
+<div class="section">
+  <div class="section-head">
+    <h2>Resolved events</h2>
+    <span class="eyebrow">{{ rows|length }} shown</span>
+  </div>
+
+  {% if not rows %}
+  <div class="empty-state">No historical events match these filters.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Event</th><th>Date</th><th>Selection</th><th class="num">Closing price</th><th>Result</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {% for sel in row.selections %}
+        {% set c = row.closing.get(sel.id) %}
+        {% set result = row.outcomes.get(sel.id) %}
+        <tr>
+          <td>{{ row.event.away_team_name }} @ {{ row.event.home_team_name }}</td>
+          <td>{{ row.event.start_time.strftime('%b %d, %Y') }}</td>
+          <td>{{ sel.name }}</td>
+          <td class="num">{% if c %}{{ '%+.0f'|format(c.price) if c.price > 0 else '%.0f'|format(c.price) }}{% else %}—{% endif %}</td>
+          <td>
+            {% if result == 'win' %}<span class="badge badge-signal">Win</span>
+            {% elif result == 'loss' %}<span class="badge badge-fade">Loss</span>
+            {% elif result == 'push' %}<span class="badge badge-neutral">Push</span>
+            {% else %}<span class="badge badge-neutral">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

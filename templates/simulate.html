@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Simulate{% endblock %}
+{% block page_title %}Simulate{% endblock %}
+{% block page_sub %}Backtesting against history, or Monte Carlo simulation of future trials{% endblock %}
+
+{% block content %}
+<div class="page-lede">
+  <p>These are two different questions. <strong>Backtest</strong> asks: how would this strategy have performed on historical data, using only information available at each decision point? <strong>Monte Carlo</strong> asks: if my assumed probability and price are correct, what's the range of outcomes over many future bets?</p>
+</div>
+
+<div class="learn-toc" role="tablist" aria-label="Simulation mode">
+  <a href="/simulate?mode=backtest" role="tab" aria-selected="{{ 'true' if filters.mode=='backtest' else 'false' }}" style="{{ 'border-color:var(--accent-info); color:var(--text);' if filters.mode=='backtest' else '' }}">Backtest (historical)</a>
+  <a href="/simulate?mode=monte_carlo" role="tab" aria-selected="{{ 'true' if filters.mode!='backtest' else 'false' }}" style="{{ 'border-color:var(--accent-info); color:var(--text);' if filters.mode!='backtest' else '' }}">Monte Carlo (forward-looking)</a>
+</div>
+
+{% if filters.mode == 'backtest' %}
+<div class="risk-banner"><span aria-hidden="true">📜</span><span><strong>Historical backtest.</strong> This replays past, resolved events using only odds that were available at decision time (no look-ahead). Past performance does not predict future results.</span></div>
+
+<form class="filter-bar" method="get" action="/simulate">
+  <input type="hidden" name="mode" value="backtest">
+  <div class="field">
+    <label for="bt-sport">Sport</label>
+    <select id="bt-sport" name="sport" onchange="this.form.submit()">
+      <option value="nba" {% if filters.sport=='nba' %}selected{% endif %}>Basketball (NBA)</option>
+      <option value="nfl" {% if filters.sport=='nfl' %}selected{% endif %}>Football (NFL)</option>
+      <option value="epl" {% if filters.sport=='epl' %}selected{% endif %}>Soccer (EPL)</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="bt-strategy">Strategy</label>
+    <select id="bt-strategy" name="strategy_id" onchange="this.form.submit()">
+      {% for s in strategies %}
+      <option value="{{ s.id }}" {% if filters.strategy_id==s.id %}selected{% endif %}>{{ s.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="bt-model">Model</label>
+    <select id="bt-model" name="model" onchange="this.form.submit()">
+      {% for key, m in models.items() %}
+      <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="bt-unit">Unit size ($)</label>
+    <input type="number" id="bt-unit" name="unit_size" min="1" step="1" value="{{ filters.unit_size }}" style="width:90px;">
+  </div>
+  <button class="btn btn-primary" type="submit">Run backtest</button>
+</form>
+
+{% if backtest_result %}
+{% set r = backtest_result %}
+<div class="section">
+  <div class="stat-row" style="margin-bottom:1.5rem;">
+    <div class="stat"><span class="stat-label">Events considered</span><span class="stat-value">{{ r.events_considered }}</span></div>
+    <div class="stat"><span class="stat-label">Bets placed</span><span class="stat-value">{{ r.events_bet }}</span></div>
+    <div class="stat"><span class="stat-label">Win rate</span><span class="stat-value">{{ '%.0f'|format(r.win_rate*100) }}%</span></div>
+    <div class="stat"><span class="stat-label">Total staked</span><span class="stat-value">${{ '%.2f'|format(r.total_staked) }}</span></div>
+    <div class="stat"><span class="stat-label">Total profit</span><span class="stat-value {{ 'positive' if r.total_profit>0 else 'negative' }}">${{ '%.2f'|format(r.total_profit) }}</span></div>
+    <div class="stat"><span class="stat-label">ROI</span><span class="stat-value {{ 'positive' if r.roi>0 else 'negative' }}">{{ '%+.1f'|format(r.roi*100) }}%</span></div>
+    <div class="stat"><span class="stat-label">Avg. return / bet</span><span class="stat-value">${{ '%.2f'|format(r.average_return) }}</span></div>
+    <div class="stat"><span class="stat-label">Max drawdown</span><span class="stat-value negative">${{ '%.2f'|format(r.max_drawdown) }}</span></div>
+    <div class="stat"><span class="stat-label">Longest losing streak</span><span class="stat-value">{{ r.longest_losing_streak }}</span></div>
+  </div>
+
+  {% if not r.bets %}
+  <div class="empty-state">No historical bets met this strategy's criteria for the selected sport.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Event</th><th>Date</th><th>Selection</th><th class="num">Edge</th><th>Classification</th><th>Result</th><th class="num">Profit</th></tr></thead>
+      <tbody>
+        {% for b in r.bets %}
+        <tr>
+          <td>{{ b.event_label }}</td>
+          <td>{{ b.start_time[:10] }}</td>
+          <td>{{ b.selection_name }}</td>
+          <td class="num {{ 'positive' if b.edge>0 else 'negative' }}">{{ '%+.1f'|format(b.edge*100) }}%</td>
+          <td>{% if b.classification == 'Strong Candidate' %}<span class="badge badge-signal">Strong</span>{% else %}<span class="badge badge-info">Candidate</span>{% endif %}</td>
+          <td>{% if b.result=='win' %}<span class="badge badge-signal">Win</span>{% elif b.result=='push' %}<span class="badge badge-neutral">Push</span>{% else %}<span class="badge badge-fade">Loss</span>{% endif %}</td>
+          <td class="num {{ 'positive' if b.profit>0 else 'negative' }}">${{ '%.2f'|format(b.profit) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="risk-banner"><span aria-hidden="true">🎲</span><span><strong>Monte Carlo simulation.</strong> This is a forward-looking simulation of hypothetical future bets at the probability and price you provide — it is not historical data and does not predict any specific outcome.</span></div>
+
+<form class="filter-bar" method="get" action="/simulate">
+  <input type="hidden" name="mode" value="monte_carlo">
+  <div class="field">
+    <label for="mc-prob">Win probability (%)</label>
+    <input type="number" id="mc-prob" name="win_probability" min="1" max="99" step="0.1" value="{{ filters.win_probability }}" style="width:90px;">
+  </div>
+  <div class="field">
+    <label for="mc-odds">Decimal odds</label>
+    <input type="number" id="mc-odds" name="decimal_odds" min="1.01" step="0.01" value="{{ filters.decimal_odds }}" style="width:90px;">
+  </div>
+  <div class="field">
+    <label for="mc-stake">Stake ($)</label>
+    <input type="number" id="mc-stake" name="stake" min="1" step="1" value="{{ filters.stake }}" style="width:90px;">
+  </div>
+  <div class="field">
+    <label for="mc-bets">Bets per trial</label>
+    <input type="number" id="mc-bets" name="bets_per_trial" min="1" max="1000" step="1" value="{{ filters.bets_per_trial }}" style="width:90px;">
+  </div>
+  <div class="field">
+    <label for="mc-trials">Trials</label>
+    <input type="number" id="mc-trials" name="trials" min="100" max="20000" step="100" value="{{ filters.trials }}" style="width:100px;">
+  </div>
+  <button class="btn btn-primary" type="submit">Run simulation</button>
+</form>
+
+{% if mc_result %}
+{% set r = mc_result %}
+<div class="section">
+  <div class="stat-row" style="margin-bottom:1.5rem;">
+    <div class="stat"><span class="stat-label">Trials</span><span class="stat-value">{{ r.trials }}</span></div>
+    <div class="stat"><span class="stat-label">Bets / trial</span><span class="stat-value">{{ r.bets_per_trial }}</span></div>
+    <div class="stat"><span class="stat-label">Win rate</span><span class="stat-value">{{ '%.0f'|format(r.win_rate*100) }}%</span></div>
+    <div class="stat"><span class="stat-label">Expected return</span><span class="stat-value {{ 'positive' if r.expected_return>0 else 'negative' }}">${{ '%.2f'|format(r.expected_return) }}</span></div>
+    <div class="stat"><span class="stat-label">Median return</span><span class="stat-value">${{ '%.2f'|format(r.median_return) }}</span></div>
+    <div class="stat"><span class="stat-label">ROI</span><span class="stat-value {{ 'positive' if r.roi>0 else 'negative' }}">{{ '%+.1f'|format(r.roi*100) }}%</span></div>
+    <div class="stat"><span class="stat-label">Avg. max drawdown</span><span class="stat-value negative">${{ '%.2f'|format(r.max_drawdown_avg) }}</span></div>
+    <div class="stat"><span class="stat-label">Avg. losing streak</span><span class="stat-value">{{ '%.1f'|format(r.longest_losing_streak_avg) }}</span></div>
+    <div class="stat"><span class="stat-label">Worst case</span><span class="stat-value negative">${{ '%.2f'|format(r.worst_case_return) }}</span></div>
+    <div class="stat"><span class="stat-label">Best case</span><span class="stat-value positive">${{ '%.2f'|format(r.best_case_return) }}</span></div>
+  </div>
+
+  <div class="card">
+    <h3>Distribution of trial returns (sampled)</h3>
+    <div class="dist-chart" role="img" aria-label="Distribution of simulated returns across trials, from worst case to best case">
+      {% for h in r.bars %}
+      <div class="dist-bar {{ 'positive' if r.return_distribution_sample[loop.index0] >= 0 else 'negative' }}" style="height:{{ h }}%;"></div>
+      {% endfor %}
+    </div>
+    <div class="edge-meter-labels" style="margin-top:0.4rem;">
+      <span>${{ '%.0f'|format(r.worst_case_return) }}</span>
+      <span>${{ '%.0f'|format(r.best_case_return) }}</span>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
+<style>
+  .dist-chart { display:flex; align-items:flex-end; gap:2px; height:120px; padding:0.5rem; background:var(--surface-raised); border:1px solid var(--border); border-radius:var(--radius-md); }
+  .dist-bar { flex:1; min-width:2px; border-radius:2px 2px 0 0; }
+  .dist-bar.positive { background:var(--accent-signal); }
+  .dist-bar.negative { background:var(--accent-fade); }
+</style>
+{% endblock %}

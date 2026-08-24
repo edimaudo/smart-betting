@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Markets{% endblock %}
+{% block page_title %}Markets{% endblock %}
+{% block page_sub %}Current and upcoming betting markets across sportsbooks{% endblock %}
+
+{% block content %}
+<div class="page-lede">
+  <p>Live-current odds across events and sportsbooks. This view shows current prices only — see <a href="/history">History</a> for opening/closing comparisons on resolved events.</p>
+</div>
+
+<form class="filter-bar" method="get" action="/markets">
+  <div class="field">
+    <label for="m-sport">Sport</label>
+    <select id="m-sport" name="sport" onchange="this.form.submit()">
+      <option value="">All sports</option>
+      {% for s in sports %}
+      <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="m-date">Date</label>
+    <input type="date" id="m-date" name="date" value="{{ filters.date or '' }}" onchange="this.form.submit()">
+  </div>
+  <div class="field">
+    <label for="m-market">Market type</label>
+    <select id="m-market" name="market_type" onchange="this.form.submit()">
+      {% for mt in market_types %}
+      <option value="{{ mt }}" {% if filters.market_type==mt %}selected{% endif %}>{{ mt|capitalize }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="m-book">Sportsbook</label>
+    <select id="m-book" name="sportsbook" onchange="this.form.submit()">
+      <option value="">All books</option>
+      {% for b in sportsbooks %}
+      <option value="{{ b }}" {% if filters.sportsbook==b %}selected{% endif %}>{{ b }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field" style="flex:1; min-width:160px;">
+    <label for="m-q">Team / event</label>
+    <input type="text" id="m-q" name="q" placeholder="Search team name…" value="{{ filters.q }}">
+  </div>
+  <button class="btn" type="submit">Apply</button>
+</form>
+
+<div class="section">
+  <div class="section-head">
+    <h2>Market board</h2>
+    <span class="eyebrow">{{ rows|length }} events</span>
+  </div>
+
+  {% if not rows %}
+  <div class="empty-state">No markets match these filters.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Event</th><th>Start</th><th>Selection</th><th>Sportsbook</th>
+          <th class="num">Price</th><th>Retrieved</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {% for sel in row.selections %}
+        {% set sel_odds = row.odds|selectattr('selection_id','equalto',sel.id)|list %}
+        {% for o in sel_odds %}
+        <tr>
+          <td>
+            <a href="/markets/{{ row.event.id }}">{{ row.event.away_team_name }} @ {{ row.event.home_team_name }}</a>
+            <div class="opp-card-meta">{{ row.event.sport_name }}</div>
+          </td>
+          <td>{{ row.event.start_time.strftime('%b %d, %I:%M %p') }}</td>
+          <td>{{ sel.name }}</td>
+          <td>{{ o.sportsbook }}</td>
+          <td class="num">{{ '%+.0f'|format(o.price) if o.price > 0 else '%.0f'|format(o.price) }}</td>
+          <td class="mono" style="font-size:0.75rem; color:var(--text-faint);">{{ o.timestamp.strftime('%b %d %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ event.away_team_name }} @ {{ event.home_team_name }}{% endblock %}
+{% block page_title %}{{ event.away_team_name }} @ {{ event.home_team_name }}{% endblock %}
+{% block page_sub %}{{ event.sport_name }} · {{ event.start_time.strftime('%b %d, %I:%M %p') }} UTC · {{ event.status.value|capitalize }}{% endblock %}
+
+{% block content %}
+<p><a href="/markets">← Back to Markets</a></p>
+
+{% for block in market_blocks %}
+<div class="section">
+  <div class="section-head"><h2>{{ block.market.name }}</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Selection</th><th>Sportsbook</th>
+          <th class="num">Opening</th><th class="num">Current</th><th>Movement</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in block.by_selection %}
+        {% set books = (entry.opening|map(attribute='sportsbook')|list + entry.current|map(attribute='sportsbook')|list)|unique|list %}
+        {% for book in books %}
+        {% set open_o = entry.opening|selectattr('sportsbook','equalto',book)|first %}
+        {% set cur_o = entry.current|selectattr('sportsbook','equalto',book)|first %}
+        <tr>
+          <td>{{ entry.selection.name }}</td>
+          <td>{{ book }}</td>
+          <td class="num">{% if open_o %}{{ '%+.0f'|format(open_o.price) if open_o.price > 0 else '%.0f'|format(open_o.price) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if cur_o %}{{ '%+.0f'|format(cur_o.price) if cur_o.price > 0 else '%.0f'|format(cur_o.price) }}{% else %}—{% endif %}</td>
+          <td>
+            {% if open_o and cur_o %}
+              {% if cur_o.price > open_o.price %}<span class="badge badge-signal">Drifted out</span>
+              {% elif cur_o.price < open_o.price %}<span class="badge badge-fade">Shortened</span>
+              {% else %}<span class="badge badge-neutral">Unchanged</span>{% endif %}
+            {% else %}<span class="badge badge-neutral">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+{% if not market_blocks %}
+<div class="empty-state">No market data available for this event.</div>
+{% endif %}
+{% endblock %}

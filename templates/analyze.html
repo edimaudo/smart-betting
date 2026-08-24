@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Analyze{% endblock %}
+{% block page_title %}Analyze{% endblock %}
+{% block page_sub %}Implied probability, vig adjustment, model probability, edge, and expected value{% endblock %}
+
+{% block content %}
+<div class="page-lede">
+  <p>Pick an upcoming event and selection to run it through the analysis engine. This converts current market odds and a chosen model's probability into implied probability, a vig-adjusted market probability where available, edge, and expected value.</p>
+</div>
+
+<form class="filter-bar" method="get" action="/analyze" id="analyze-form">
+  <div class="field">
+    <label for="a-sport">Sport</label>
+    <select id="a-sport" name="sport" onchange="document.getElementById('a-event').value=''; document.getElementById('a-selection').value=''; this.form.submit();">
+      <option value="">All sports</option>
+      {% for s in sports %}
+      <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field" style="min-width:260px;">
+    <label for="a-event">Event</label>
+    <select id="a-event" name="event" onchange="document.getElementById('a-selection').value=''; this.form.submit();">
+      {% for opt in options %}
+      <option value="{{ opt.event.id }}" {% if filters.event==opt.event.id %}selected{% endif %}>
+        {{ opt.event.away_team_name }} @ {{ opt.event.home_team_name }} · {{ opt.event.start_time.strftime('%b %d') }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="a-selection">Selection</label>
+    <select id="a-selection" name="selection" onchange="this.form.submit()">
+      {% set chosen_option = options|selectattr('event.id','equalto',filters.event)|first %}
+      {% if chosen_option %}
+      {% for sel in chosen_option.selections %}
+      <option value="{{ sel.id }}" {% if filters.selection==sel.id %}selected{% endif %}>{{ sel.name }}</option>
+      {% endfor %}
+      {% endif %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="a-model">Model</label>
+    <select id="a-model" name="model" onchange="this.form.submit()">
+      {% for key, m in models.items() %}
+      <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="a-stake">Stake ($)</label>
+    <input type="number" id="a-stake" name="stake" min="1" step="1" value="{{ filters.stake }}" style="width:90px;">
+  </div>
+  <button class="btn btn-primary" type="submit">Analyze</button>
+</form>
+
+{% if not options %}
+<div class="empty-state">No upcoming moneyline events available for this sport right now.</div>
+{% elif not analysis %}
+<div class="empty-state">Select an event and selection above to run the analysis.</div>
+{% elif analysis.error %}
+<div class="card"><p style="margin:0;">{{ analysis.error }}</p></div>
+{% else %}
+{% set res = analysis.result %}
+<div class="card" style="margin-bottom:1.25rem;">
+  <div class="section-head">
+    <div>
+      <h2 style="margin-bottom:0.2rem;">{{ analysis.event.away_team_name }} @ {{ analysis.event.home_team_name }}</h2>
+      <span class="eyebrow">{{ analysis.market.name }} · {{ analysis.target_selection.name }} · {{ analysis.event.start_time.strftime('%b %d, %I:%M %p') }} UTC</span>
+    </div>
+    {% if not res.data_sufficient %}<span class="badge badge-neutral">Insufficient data</span>{% endif %}
+  </div>
+
+  {% if res.market_implied_probability is not none and res.model_probability is not none %}
+  <div class="edge-meter" data-market="{{ res.market_normalized_probability or res.market_implied_probability }}" data-model="{{ res.model_probability }}" style="margin-bottom:1.25rem;"></div>
+  {% endif %}
+
+  <div class="stat-row" style="margin-bottom:1rem;">
+    <div class="stat">
+      <span class="stat-label">Implied probability</span>
+      <span class="stat-value">{{ '%.1f'|format(res.market_implied_probability*100) if res.market_implied_probability is not none else '—' }}%</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Vig-adjusted probability</span>
+      <span class="stat-value">{{ '%.1f'|format(res.market_normalized_probability*100) if res.market_normalized_probability is not none else '—' }}%</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Model probability</span>
+      <span class="stat-value">{{ '%.1f'|format(res.model_probability*100) if res.model_probability is not none else '—' }}%</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Model confidence</span>
+      <span class="stat-value">{{ '%.0f'|format(res.model_confidence*100) if res.model_confidence is not none else '—' }}%</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Edge</span>
+      <span class="stat-value {{ 'positive' if res.edge and res.edge > 0 else 'negative' if res.edge and res.edge < 0 else '' }}">
+        {% if res.edge is not none %}{{ '%+.1f'|format(res.edge*100) }}%{% else %}—{% endif %}
+      </span>
+    </div>
+  </div>
+
+  {% if res.overround is not none %}
+  <p style="font-size:0.8rem;">Market overround: <span class="mono">{{ '%.1f'|format((res.overround-1)*100) }}%</span> (sum of implied probabilities across all selections, before de-vigging).</p>
+  {% endif %}
+
+  {% for note in res.notes %}<p style="font-size:0.8rem; color:var(--text-faint);">{{ note }}</p>{% endfor %}
+</div>
+
+{% if res.data_sufficient %}
+<div class="card" style="margin-bottom:1.25rem;">
+  <h3>Expected value at ${{ '%.0f'|format(filters.stake) }} stake</h3>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label">Decimal odds</span><span class="stat-value">{{ '%.2f'|format(res.decimal_odds) }}</span></div>
+    <div class="stat"><span class="stat-label">Stake</span><span class="stat-value">${{ '%.2f'|format(filters.stake) }}</span></div>
+    <div class="stat"><span class="stat-label">Payout if win</span><span class="stat-value">${{ '%.2f'|format(filters.stake * res.decimal_odds) }}</span></div>
+    <div class="stat"><span class="stat-label">Profit if win</span><span class="stat-value">${{ '%.2f'|format(filters.stake * (res.decimal_odds - 1)) }}</span></div>
+    <div class="stat">
+      <span class="stat-label">Expected value</span>
+      <span class="stat-value {{ 'positive' if res.expected_value_per_unit > 0 else 'negative' }}">
+        {{ '%.2f'|format(res.expected_value_per_unit * filters.stake) }}$ ({{ '%+.1f'|format(res.expected_value_per_unit*100) }}%)
+      </span>
+    </div>
+  </div>
+  <p style="font-size:0.78rem; margin-top:0.75rem;">Expected value reflects the average result if this exact price and probability were repeated many times — it is not a guarantee for this individual bet. See <a href="/decide?event={{ analysis.event.id }}&selection={{ analysis.target_selection.id }}&sport={{ analysis.event.sport_id }}&model={{ filters.model }}">Decide</a> for a strategy-gated verdict.</p>
+</div>
+
+<div class="card">
+  <h3>{{ res.model_name }} — model assumptions</h3>
+  <ul class="reason-list">
+    {% for a in models[filters.model].assumptions %}<li>{{ a }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var meter = document.querySelector('.edge-meter[data-market]');
+  if (meter) renderEdgeMeter(meter, parseFloat(meter.dataset.market), parseFloat(meter.dataset.model));
+</script>
+{% endblock %}

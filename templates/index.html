@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block page_title %}Overview{% endblock %}
+{% block page_sub %}Your entry point into the betting environment{% endblock %}
+
+{% block content %}
+<div class="page-lede">
+  <p>A snapshot of current and upcoming events, with a lightweight edge indicator per event. This view does not run the full decision pipeline — open <a href="/analyze">Analyze</a> for the full breakdown, or <a href="/decide">Decide</a> for a strategy-gated verdict.</p>
+</div>
+
+<form class="filter-bar" method="get" action="/">
+  <div class="field">
+    <label for="f-sport">Sport</label>
+    <select id="f-sport" name="sport" onchange="this.form.submit()">
+      <option value="">All sports</option>
+      {% for s in sports %}
+      <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="f-date">Date</label>
+    <input type="date" id="f-date" name="date" value="{{ filters.date or '' }}" onchange="this.form.submit()">
+  </div>
+  <div class="field">
+    <label for="f-market">Market type</label>
+    <select id="f-market" name="market_type" onchange="this.form.submit()">
+      {% for mt in market_types %}
+      <option value="{{ mt }}" {% if filters.market_type==mt %}selected{% endif %}>{{ mt|capitalize }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field" style="flex:1; min-width:160px;">
+    <label for="f-q">Team / event</label>
+    <input type="text" id="f-q" name="q" placeholder="Search team name…" value="{{ filters.q }}">
+  </div>
+  <button class="btn" type="submit">Apply</button>
+  {% if filters.sport or filters.date or filters.q %}<a class="btn" href="/">Clear</a>{% endif %}
+</form>
+
+<div class="section">
+  <div class="section-head">
+    <h2>Events board</h2>
+    <span class="eyebrow">{{ cards|length }} shown</span>
+  </div>
+
+  {% if not cards %}
+  <div class="empty-state">No events match these filters. Try clearing a filter or picking a different date.</div>
+  {% else %}
+  <div class="card-grid">
+    {% for c in cards %}
+    {% set res = c.analysis.result if c.analysis else None %}
+    <a class="card opp-card card-link" href="/analyze?event={{ c.event.id }}&sport={{ c.event.sport_id }}">
+      <div class="opp-card-head">
+        <div>
+          <div class="opp-card-teams">{{ c.event.away_team_name }} @ {{ c.event.home_team_name }}</div>
+          <div class="opp-card-meta">{{ c.event.sport_name }} · {{ c.event.start_time.strftime('%b %d, %I:%M %p') }} UTC · {{ c.event.status.value|capitalize }}</div>
+        </div>
+        {% if res and res.edge is not none %}
+          {% if res.edge > 0.02 %}
+          <span class="badge badge-signal">+{{ '%.1f'|format(res.edge*100) }}% edge</span>
+          {% elif res.edge < -0.02 %}
+          <span class="badge badge-fade">{{ '%.1f'|format(res.edge*100) }}% edge</span>
+          {% else %}
+          <span class="badge badge-neutral">Flat</span>
+          {% endif %}
+        {% else %}
+        <span class="badge badge-neutral">No signal</span>
+        {% endif %}
+      </div>
+
+      {% if res and res.market_implied_probability is not none and res.model_probability is not none %}
+      <div class="edge-meter" data-market="{{ res.market_normalized_probability or res.market_implied_probability }}" data-model="{{ res.model_probability }}">
+        <div class="edge-meter-labels"><span>0%</span><span>50%</span><span>100%</span></div>
+        <div class="edge-meter-track"></div>
+      </div>
+      {% else %}
+      <p style="margin:0; font-size:0.78rem;">{{ c.analysis.error if c.analysis else 'Market data unavailable.' }}</p>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('.edge-meter[data-market]').forEach(function (el) {
+    renderEdgeMeter(el, parseFloat(el.dataset.market), parseFloat(el.dataset.model));
+  });
+</script>
+{% endblock %}

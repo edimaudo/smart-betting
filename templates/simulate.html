@@ -1,52 +1,58 @@
 {% extends "base.html" %}
 {% block title %}Simulate{% endblock %}
 {% block page_title %}Simulate{% endblock %}
-{% block page_sub %}Backtesting against history, or Monte Carlo simulation of future trials{% endblock %}
 
 {% block content %}
 <div class="page-lede">
-  <p>These are two different questions. <strong>Backtest</strong> asks: how would this strategy have performed on historical data, using only information available at each decision point? <strong>Monte Carlo</strong> asks: if my assumed probability and price are correct, what's the range of outcomes over many future bets?</p>
+  <p>These are two different questions. <strong>Backtest</strong> asks how this strategy would have performed on historical data, using only information available at each decision point. <strong>Monte Carlo</strong> asks what range of outcomes to expect if your assumed probability and price are correct, over many future bets.</p>
 </div>
 
-<div class="learn-toc" role="tablist" aria-label="Simulation mode">
-  <a href="/simulate?mode=backtest" role="tab" aria-selected="{{ 'true' if filters.mode=='backtest' else 'false' }}" style="{{ 'border-color:var(--accent-info); color:var(--text);' if filters.mode=='backtest' else '' }}">Backtest (historical)</a>
-  <a href="/simulate?mode=monte_carlo" role="tab" aria-selected="{{ 'true' if filters.mode!='backtest' else 'false' }}" style="{{ 'border-color:var(--accent-info); color:var(--text);' if filters.mode!='backtest' else '' }}">Monte Carlo (forward-looking)</a>
+<div class="tabs">
+  <ul class="tab-list" role="tablist" aria-label="Simulation mode">
+    <li><a class="tab-btn" role="tab" href="/simulate?mode=backtest" aria-selected="{{ 'true' if filters.mode=='backtest' else 'false' }}">Backtest (historical)</a></li>
+    <li><a class="tab-btn" role="tab" href="/simulate?mode=monte_carlo" aria-selected="{{ 'true' if filters.mode!='backtest' else 'false' }}">Monte Carlo (forward-looking)</a></li>
+  </ul>
 </div>
 
 {% if filters.mode == 'backtest' %}
-<div class="risk-banner"><span aria-hidden="true">📜</span><span><strong>Historical backtest.</strong> This replays past, resolved events using only odds that were available at decision time (no look-ahead). Past performance does not predict future results.</span></div>
+{% set ds = data_status() %}
+<div class="risk-banner"><span aria-hidden="true">ⓘ</span><span><strong>Historical backtest.</strong> This replays past, resolved events using only odds that were available at decision time (no look-ahead). Past performance does not predict future results.{% if ds.mode == 'live' %} Note: live odds providers don't include free historical data, so this backtest runs on SmartBet's sample dataset even in live mode.{% endif %}</span></div>
 
 <form class="filter-bar" method="get" action="/simulate">
   <input type="hidden" name="mode" value="backtest">
-  <div class="field">
-    <label for="bt-sport">Sport</label>
-    <select id="bt-sport" name="sport" onchange="this.form.submit()">
-      <option value="nba" {% if filters.sport=='nba' %}selected{% endif %}>Basketball (NBA)</option>
-      <option value="nfl" {% if filters.sport=='nfl' %}selected{% endif %}>Football (NFL)</option>
-      <option value="epl" {% if filters.sport=='epl' %}selected{% endif %}>Soccer (EPL)</option>
-    </select>
+  <div class="filter-bar-grid">
+    <div class="field">
+      <label for="bt-sport">Sport</label>
+      <select id="bt-sport" name="sport" onchange="this.form.submit()">
+        <option value="nba" {% if filters.sport=='nba' %}selected{% endif %}>Basketball (NBA)</option>
+        <option value="nfl" {% if filters.sport=='nfl' %}selected{% endif %}>Football (NFL)</option>
+        <option value="epl" {% if filters.sport=='epl' %}selected{% endif %}>Soccer (EPL)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="bt-strategy">Strategy</label>
+      <select id="bt-strategy" name="strategy_id" onchange="this.form.submit()">
+        {% for s in strategies %}
+        <option value="{{ s.id }}" {% if filters.strategy_id==s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="bt-model">Model</label>
+      <select id="bt-model" name="model" onchange="this.form.submit()">
+        {% for key, m in models.items() %}
+        <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="bt-unit">Unit size ($)</label>
+      <input type="number" id="bt-unit" name="unit_size" min="1" step="1" value="{{ filters.unit_size }}">
+    </div>
+    <div class="filter-bar-actions">
+      <button class="btn btn-primary" type="submit">Run backtest</button>
+    </div>
   </div>
-  <div class="field">
-    <label for="bt-strategy">Strategy</label>
-    <select id="bt-strategy" name="strategy_id" onchange="this.form.submit()">
-      {% for s in strategies %}
-      <option value="{{ s.id }}" {% if filters.strategy_id==s.id %}selected{% endif %}>{{ s.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="bt-model">Model</label>
-    <select id="bt-model" name="model" onchange="this.form.submit()">
-      {% for key, m in models.items() %}
-      <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="bt-unit">Unit size ($)</label>
-    <input type="number" id="bt-unit" name="unit_size" min="1" step="1" value="{{ filters.unit_size }}" style="width:90px;">
-  </div>
-  <button class="btn btn-primary" type="submit">Run backtest</button>
 </form>
 
 {% if backtest_result %}
@@ -90,31 +96,35 @@
 {% endif %}
 
 {% else %}
-<div class="risk-banner"><span aria-hidden="true">🎲</span><span><strong>Monte Carlo simulation.</strong> This is a forward-looking simulation of hypothetical future bets at the probability and price you provide — it is not historical data and does not predict any specific outcome.</span></div>
+<div class="risk-banner"><span aria-hidden="true">ⓘ</span><span><strong>Monte Carlo simulation.</strong> This is a forward-looking simulation of hypothetical future bets at the probability and price you provide. It is not historical data and does not predict any specific outcome.</span></div>
 
 <form class="filter-bar" method="get" action="/simulate">
   <input type="hidden" name="mode" value="monte_carlo">
-  <div class="field">
-    <label for="mc-prob">Win probability (%)</label>
-    <input type="number" id="mc-prob" name="win_probability" min="1" max="99" step="0.1" value="{{ filters.win_probability }}" style="width:90px;">
+  <div class="filter-bar-grid">
+    <div class="field">
+      <label for="mc-prob">Win probability (%)</label>
+      <input type="number" id="mc-prob" name="win_probability" min="1" max="99" step="0.1" value="{{ filters.win_probability }}">
+    </div>
+    <div class="field">
+      <label for="mc-odds">Decimal odds</label>
+      <input type="number" id="mc-odds" name="decimal_odds" min="1.01" step="0.01" value="{{ filters.decimal_odds }}">
+    </div>
+    <div class="field">
+      <label for="mc-stake">Stake ($)</label>
+      <input type="number" id="mc-stake" name="stake" min="1" step="1" value="{{ filters.stake }}">
+    </div>
+    <div class="field">
+      <label for="mc-bets">Bets per trial</label>
+      <input type="number" id="mc-bets" name="bets_per_trial" min="1" max="1000" step="1" value="{{ filters.bets_per_trial }}">
+    </div>
+    <div class="field">
+      <label for="mc-trials">Trials</label>
+      <input type="number" id="mc-trials" name="trials" min="100" max="20000" step="100" value="{{ filters.trials }}">
+    </div>
+    <div class="filter-bar-actions">
+      <button class="btn btn-primary" type="submit">Run simulation</button>
+    </div>
   </div>
-  <div class="field">
-    <label for="mc-odds">Decimal odds</label>
-    <input type="number" id="mc-odds" name="decimal_odds" min="1.01" step="0.01" value="{{ filters.decimal_odds }}" style="width:90px;">
-  </div>
-  <div class="field">
-    <label for="mc-stake">Stake ($)</label>
-    <input type="number" id="mc-stake" name="stake" min="1" step="1" value="{{ filters.stake }}" style="width:90px;">
-  </div>
-  <div class="field">
-    <label for="mc-bets">Bets per trial</label>
-    <input type="number" id="mc-bets" name="bets_per_trial" min="1" max="1000" step="1" value="{{ filters.bets_per_trial }}" style="width:90px;">
-  </div>
-  <div class="field">
-    <label for="mc-trials">Trials</label>
-    <input type="number" id="mc-trials" name="trials" min="100" max="20000" step="100" value="{{ filters.trials }}" style="width:100px;">
-  </div>
-  <button class="btn btn-primary" type="submit">Run simulation</button>
 </form>
 
 {% if mc_result %}

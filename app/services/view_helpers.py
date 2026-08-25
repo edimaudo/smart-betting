@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from app.data.mock_provider import provider
+from app.data import provider
 from app.models.entities import Event, EventStatus, Market, Odds, Selection
 from app.models.prediction import MODEL_REGISTRY
 from app.services.analysis import AnalysisEngine, AnalysisResult, MarketSnapshot

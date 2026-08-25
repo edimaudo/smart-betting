@@ -16,7 +16,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.data.mock_provider import provider
+from app.data import provider
 from app.decision.engine import DecisionEngine, DecisionInput
 from app.models.entities import EventStatus
 from app.models.prediction import MODEL_REGISTRY
@@ -160,7 +160,7 @@ async def api_backtest(sport: str = "nba", strategy_id: str = "balanced", model:
             sels = await provider.get_selections(m.id)
             selections_by_market[m.id] = sels
             odds_by_market[m.id] = await provider.get_odds(event_id=e.id, market_type=m.market_type)
-        outcomes_by_event[e.id] = {o.selection_id: o.result for o in provider._outcomes.get(e.id, [])}
+        outcomes_by_event[e.id] = {o.selection_id: o.result for o in provider.get_outcomes(e.id)}
 
     result = backtest_engine.run(
         events=events, markets_by_event=markets_by_event, selections_by_market=selections_by_market,

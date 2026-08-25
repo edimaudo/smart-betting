@@ -94,10 +94,10 @@
       (edge >= 0 ? "+" : "") + pct(edge) + ". Expected value at a $" + s.stake.toFixed(2) + " stake is " + money(ev) + ". " +
       (chosenAttractive === null
         ? "You didn't select an answer, so there's nothing to compare here."
-        : (matched ? "Your call matched this check." : "Your call didn't match this check — compare your edge/EV math above to see why."));
+        : (matched ? "Your call matched this check." : "Your call didn't match this check. Compare your edge/EV math above to see why."));
 
     els.outcome.textContent = "In this fictional scenario, the selection actually " + (s.result === "win" ? "won" : "lost") +
-      ". Remember: a single outcome never confirms or disproves whether a bet was well-reasoned — only the price and probability at the time of the decision do.";
+      ". Remember: a single outcome never confirms or disproves whether a bet was well-reasoned. Only the price and probability at the time of the decision do.";
 
     els.form.hidden = true;
     els.reveal.classList.add('visible');

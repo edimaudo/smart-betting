@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Analyze{% endblock %}
 {% block page_title %}Analyze{% endblock %}
-{% block page_sub %}Implied probability, vig adjustment, model probability, edge, and expected value{% endblock %}
 
 {% block content %}
 <div class="page-lede">
@@ -9,49 +8,55 @@
 </div>
 
 <form class="filter-bar" method="get" action="/analyze" id="analyze-form">
-  <div class="field">
-    <label for="a-sport">Sport</label>
-    <select id="a-sport" name="sport" onchange="document.getElementById('a-event').value=''; document.getElementById('a-selection').value=''; this.form.submit();">
-      <option value="">All sports</option>
-      {% for s in sports %}
-      <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
-      {% endfor %}
-    </select>
+  <div class="filter-bar-search">
+    <div class="field">
+      <label for="a-event">Event</label>
+      <select id="a-event" name="event" onchange="document.getElementById('a-selection').value=''; this.form.submit();">
+        {% for opt in options %}
+        <option value="{{ opt.event.id }}" {% if filters.event==opt.event.id %}selected{% endif %}>
+          {{ opt.event.away_team_name }} @ {{ opt.event.home_team_name }} · {{ opt.event.start_time.strftime('%b %d, %I:%M %p') }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
   </div>
-  <div class="field" style="min-width:260px;">
-    <label for="a-event">Event</label>
-    <select id="a-event" name="event" onchange="document.getElementById('a-selection').value=''; this.form.submit();">
-      {% for opt in options %}
-      <option value="{{ opt.event.id }}" {% if filters.event==opt.event.id %}selected{% endif %}>
-        {{ opt.event.away_team_name }} @ {{ opt.event.home_team_name }} · {{ opt.event.start_time.strftime('%b %d') }}
-      </option>
-      {% endfor %}
-    </select>
+  <div class="filter-bar-grid">
+    <div class="field">
+      <label for="a-sport">Sport</label>
+      <select id="a-sport" name="sport" onchange="document.getElementById('a-event').value=''; document.getElementById('a-selection').value=''; this.form.submit();">
+        <option value="">All sports</option>
+        {% for s in sports %}
+        <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="a-selection">Selection</label>
+      <select id="a-selection" name="selection" onchange="this.form.submit()">
+        {% set chosen_option = options|selectattr('event.id','equalto',filters.event)|first %}
+        {% if chosen_option %}
+        {% for sel in chosen_option.selections %}
+        <option value="{{ sel.id }}" {% if filters.selection==sel.id %}selected{% endif %}>{{ sel.name }}</option>
+        {% endfor %}
+        {% endif %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="a-model">Model</label>
+      <select id="a-model" name="model" onchange="this.form.submit()">
+        {% for key, m in models.items() %}
+        <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="a-stake">Stake ($)</label>
+      <input type="number" id="a-stake" name="stake" min="1" step="1" value="{{ filters.stake }}">
+    </div>
+    <div class="filter-bar-actions">
+      <button class="btn btn-primary" type="submit">Analyze</button>
+    </div>
   </div>
-  <div class="field">
-    <label for="a-selection">Selection</label>
-    <select id="a-selection" name="selection" onchange="this.form.submit()">
-      {% set chosen_option = options|selectattr('event.id','equalto',filters.event)|first %}
-      {% if chosen_option %}
-      {% for sel in chosen_option.selections %}
-      <option value="{{ sel.id }}" {% if filters.selection==sel.id %}selected{% endif %}>{{ sel.name }}</option>
-      {% endfor %}
-      {% endif %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="a-model">Model</label>
-    <select id="a-model" name="model" onchange="this.form.submit()">
-      {% for key, m in models.items() %}
-      <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="a-stake">Stake ($)</label>
-    <input type="number" id="a-stake" name="stake" min="1" step="1" value="{{ filters.stake }}" style="width:90px;">
-  </div>
-  <button class="btn btn-primary" type="submit">Analyze</button>
 </form>
 
 {% if not options %}
@@ -122,11 +127,11 @@
       </span>
     </div>
   </div>
-  <p style="font-size:0.78rem; margin-top:0.75rem;">Expected value reflects the average result if this exact price and probability were repeated many times — it is not a guarantee for this individual bet. See <a href="/decide?event={{ analysis.event.id }}&selection={{ analysis.target_selection.id }}&sport={{ analysis.event.sport_id }}&model={{ filters.model }}">Decide</a> for a strategy-gated verdict.</p>
+  <p style="font-size:0.78rem; margin-top:0.75rem;">Expected value reflects the average result if this exact price and probability were repeated many times. It is not a guarantee for this individual bet. See <a href="/decide?event={{ analysis.event.id }}&selection={{ analysis.target_selection.id }}&sport={{ analysis.event.sport_id }}&model={{ filters.model }}">Decide</a> for a strategy-gated verdict.</p>
 </div>
 
 <div class="card">
-  <h3>{{ res.model_name }} — model assumptions</h3>
+  <h3>{{ res.model_name }}: model assumptions</h3>
   <ul class="reason-list">
     {% for a in models[filters.model].assumptions %}<li>{{ a }}</li>{% endfor %}
   </ul>

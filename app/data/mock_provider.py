@@ -333,6 +333,9 @@ class MockSportsDataProvider:
             events = [e for e in events if e.sport_id == sport_id]
         return sorted(events, key=lambda e: e.start_time)
 
+    def get_outcomes(self, event_id: str) -> list[Outcome]:
+        return list(self._outcomes.get(event_id, []))
+
 
 # Module-level singleton so all requests share the same generated dataset
 # for the lifetime of the process (mirrors an in-memory cache layer).

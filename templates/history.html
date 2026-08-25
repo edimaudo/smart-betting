@@ -1,45 +1,56 @@
 {% extends "base.html" %}
 {% block title %}History{% endblock %}
 {% block page_title %}Data history{% endblock %}
-{% block page_sub %}Resolved events with closing prices and outcomes{% endblock %}
 
 {% block content %}
 <div class="page-lede">
-  <p>Historical odds and outcomes preserve their original timestamps so they can be used for backtesting without look-ahead bias — see <a href="/simulate">Simulate</a> to run a strategy against this dataset.</p>
+  <p>Historical odds and outcomes preserve their original timestamps so they can be used for backtesting without look-ahead bias. See <a href="/simulate">Simulate</a> to run a strategy against this dataset.</p>
 </div>
 
+{% set ds = data_status() %}
+{% if ds.mode == 'live' %}
+<div class="risk-banner"><span aria-hidden="true">ⓘ</span><span>Live odds are active for upcoming markets, but real-time providers on a free tier don't include historical odds. This history is SmartBet's sample dataset, not live data.</span></div>
+{% endif %}
+
 <form class="filter-bar" method="get" action="/history">
-  <div class="field">
-    <label for="h-sport">Sport</label>
-    <select id="h-sport" name="sport" onchange="this.form.submit()">
-      <option value="">All sports</option>
-      {% for s in sports %}
-      <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
-      {% endfor %}
-    </select>
+  <div class="filter-bar-search">
+    <div class="field">
+      <label for="h-team">Search team</label>
+      <input type="search" id="h-team" name="team" placeholder="Search team name…" value="{{ filters.team }}">
+    </div>
   </div>
-  <div class="field">
-    <label for="h-season">Season</label>
-    <select id="h-season" name="season" onchange="this.form.submit()">
-      <option value="">All seasons</option>
-      {% for yr in seasons %}
-      <option value="{{ yr }}" {% if filters.season==yr %}selected{% endif %}>{{ yr }}</option>
-      {% endfor %}
-    </select>
+  <div class="filter-bar-grid">
+    <div class="field">
+      <label for="h-sport">Sport</label>
+      <select id="h-sport" name="sport" onchange="this.form.submit()">
+        <option value="">All sports</option>
+        {% for s in sports %}
+        <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="h-season">Season</label>
+      <select id="h-season" name="season" onchange="this.form.submit()">
+        <option value="">All seasons</option>
+        {% for yr in seasons %}
+        <option value="{{ yr }}" {% if filters.season==yr %}selected{% endif %}>{{ yr }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="h-from">From</label>
+      <input type="date" id="h-from" name="date_from" value="{{ filters.date_from or '' }}" onchange="this.form.submit()">
+    </div>
+    <div class="field">
+      <label for="h-to">To</label>
+      <input type="date" id="h-to" name="date_to" value="{{ filters.date_to or '' }}" onchange="this.form.submit()">
+    </div>
+    <div class="filter-bar-actions">
+      <button class="btn btn-primary" type="submit">Apply filters</button>
+      {% if filters.sport or filters.season or filters.team or filters.date_from or filters.date_to %}<a class="btn" href="/history">Clear</a>{% endif %}
+    </div>
   </div>
-  <div class="field">
-    <label for="h-from">From</label>
-    <input type="date" id="h-from" name="date_from" value="{{ filters.date_from or '' }}" onchange="this.form.submit()">
-  </div>
-  <div class="field">
-    <label for="h-to">To</label>
-    <input type="date" id="h-to" name="date_to" value="{{ filters.date_to or '' }}" onchange="this.form.submit()">
-  </div>
-  <div class="field" style="flex:1; min-width:160px;">
-    <label for="h-team">Team</label>
-    <input type="text" id="h-team" name="team" placeholder="Search team name…" value="{{ filters.team }}">
-  </div>
-  <button class="btn" type="submit">Apply</button>
 </form>
 
 <div class="section">

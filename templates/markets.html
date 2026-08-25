@@ -1,54 +1,60 @@
 {% extends "base.html" %}
 {% block title %}Markets{% endblock %}
 {% block page_title %}Markets{% endblock %}
-{% block page_sub %}Current and upcoming betting markets across sportsbooks{% endblock %}
 
 {% block content %}
 <div class="page-lede">
-  <p>Live-current odds across events and sportsbooks. This view shows current prices only — see <a href="/history">History</a> for opening/closing comparisons on resolved events.</p>
+  <p>Odds for upcoming events across sportsbooks. This view shows current prices only. See <a href="/history">History</a> for opening/closing comparisons on resolved events.</p>
 </div>
 
 <form class="filter-bar" method="get" action="/markets">
-  <div class="field">
-    <label for="m-sport">Sport</label>
-    <select id="m-sport" name="sport" onchange="this.form.submit()">
-      <option value="">All sports</option>
-      {% for s in sports %}
-      <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
-      {% endfor %}
-    </select>
+  <div class="filter-bar-search">
+    <div class="field">
+      <label for="m-q">Search team or event</label>
+      <input type="search" id="m-q" name="q" placeholder="Search team name…" value="{{ filters.q }}">
+    </div>
   </div>
-  <div class="field">
-    <label for="m-date">Date</label>
-    <input type="date" id="m-date" name="date" value="{{ filters.date or '' }}" onchange="this.form.submit()">
+  <div class="filter-bar-grid">
+    <div class="field">
+      <label for="m-sport">Sport</label>
+      <select id="m-sport" name="sport" onchange="this.form.submit()">
+        <option value="">All sports</option>
+        {% for s in sports %}
+        <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="m-date">Date</label>
+      <input type="date" id="m-date" name="date" value="{{ filters.date or '' }}" onchange="this.form.submit()">
+    </div>
+    <div class="field">
+      <label for="m-market">Market type</label>
+      <select id="m-market" name="market_type" onchange="this.form.submit()">
+        {% for mt in market_types %}
+        <option value="{{ mt }}" {% if filters.market_type==mt %}selected{% endif %}>{{ mt|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="m-book">Sportsbook</label>
+      <select id="m-book" name="sportsbook" onchange="this.form.submit()">
+        <option value="">All books</option>
+        {% for b in sportsbooks %}
+        <option value="{{ b }}" {% if filters.sportsbook==b %}selected{% endif %}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-bar-actions">
+      <button class="btn btn-primary" type="submit">Apply filters</button>
+      {% if filters.sport or filters.date or filters.q or filters.sportsbook %}<a class="btn" href="/markets">Clear</a>{% endif %}
+    </div>
   </div>
-  <div class="field">
-    <label for="m-market">Market type</label>
-    <select id="m-market" name="market_type" onchange="this.form.submit()">
-      {% for mt in market_types %}
-      <option value="{{ mt }}" {% if filters.market_type==mt %}selected{% endif %}>{{ mt|capitalize }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="m-book">Sportsbook</label>
-    <select id="m-book" name="sportsbook" onchange="this.form.submit()">
-      <option value="">All books</option>
-      {% for b in sportsbooks %}
-      <option value="{{ b }}" {% if filters.sportsbook==b %}selected{% endif %}>{{ b }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field" style="flex:1; min-width:160px;">
-    <label for="m-q">Team / event</label>
-    <input type="text" id="m-q" name="q" placeholder="Search team name…" value="{{ filters.q }}">
-  </div>
-  <button class="btn" type="submit">Apply</button>
 </form>
 
 <div class="section">
   <div class="section-head">
-    <h2>Market board</h2>
+    <h2>Upcoming markets</h2>
     <span class="eyebrow">{{ rows|length }} events</span>
   </div>
 

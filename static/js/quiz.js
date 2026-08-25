@@ -18,7 +18,7 @@
         "The amount of money already wagered"
       ],
       answer: 1,
-      explanation: "Every price implies a break-even probability — the win rate at which the bet would neither profit nor lose money over time."
+      explanation: "Every price implies a break-even probability: the win rate at which the bet would neither profit nor lose money over time."
     },
     {
       question: "Decimal odds of 3.00 on a $20 stake return how much in total if the bet wins?",
@@ -35,7 +35,7 @@
         "A push always occurs"
       ],
       answer: 0,
-      explanation: "Negative American odds show the stake needed to profit $100 — here, $150 staked profits $100 (implied probability 60%)."
+      explanation: "Negative American odds show the stake needed to profit $100. Here, $150 staked profits $100 (implied probability 60%)."
     },
     {
       question: "Why does the sum of implied probabilities across a market's selections usually exceed 100%?",
@@ -46,7 +46,7 @@
         "Because odds only apply to favorites"
       ],
       answer: 1,
-      explanation: "The excess above 100% is the bookmaker's margin — often called the vig or juice — built into the odds rather than charged separately."
+      explanation: "The excess above 100% is the bookmaker's margin, often called the vig or juice, built into the odds rather than charged separately."
     },
     {
       question: "\"Edge\" in this application is best defined as:",
@@ -79,7 +79,7 @@
         "A closing line"
       ],
       answer: 1,
-      explanation: "Proportional de-vigging normalizes each selection's implied probability against the sum of ALL selections in the market — partial market data isn't enough."
+      explanation: "Proportional de-vigging normalizes each selection's implied probability against the sum of ALL selections in the market. Partial market data isn't enough."
     },
     {
       question: "The \"closing line\" refers to:",
@@ -101,7 +101,7 @@
         "It isn't necessary if the sample size is large"
       ],
       answer: 1,
-      explanation: "Using future odds, outcomes, or closing prices when testing an earlier decision point is look-ahead bias — it inflates backtested performance in a way that wouldn't have been achievable in real time."
+      explanation: "Using future odds, outcomes, or closing prices when testing an earlier decision point is look-ahead bias. It inflates backtested performance in a way that wouldn't have been achievable in real time."
     },
     {
       question: "This application's core principle is best summarized as:",
@@ -112,7 +112,7 @@
         "Maximize the number of bets placed"
       ],
       answer: 2,
-      explanation: "The product principle is explicit: don't just predict who will win — evaluate whether the price on offer justifies the risk, given edge, expected value, and confidence."
+      explanation: "The product principle is explicit: don't just predict who will win. Evaluate whether the price on offer justifies the risk, given edge, expected value, and confidence."
     }
   ];
 
@@ -150,7 +150,7 @@
   }
 
   function selectOption(i, btn) {
-    if (state.answered) return; // one answer per question — no changing after submit
+    if (state.answered) return; // one answer per question, no changing after submit
     state.answered = true;
 
     var item = QUESTIONS[state.index];
@@ -188,7 +188,7 @@
       return {
         label: "Ready for Learner Simulator",
         cls: "badge-signal",
-        note: "You're ready to apply these concepts in the Learner Simulator — realistic scenarios with no real money involved."
+        note: "You're ready to apply these concepts in the Learner Simulator: realistic scenarios with no real money involved."
       };
     }
     if (pct >= THRESHOLDS.developing) {
@@ -201,7 +201,7 @@
     return {
       label: "Review Required",
       cls: "badge-fade",
-      note: "Revisit the Learn section before progressing — especially odds conversion, implied probability, and edge."
+      note: "Revisit the Learn section before progressing, especially odds conversion, implied probability, and edge."
     };
   }
 

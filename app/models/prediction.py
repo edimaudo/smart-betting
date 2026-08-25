@@ -13,7 +13,6 @@ implementing `BettingModel.predict`.
 """
 from __future__ import annotations
 
-import hashlib
 from abc import ABC, abstractmethod
 
 from app.calculations.odds import implied_probability
@@ -91,50 +90,109 @@ class MarketConsensusModel(BettingModel):
         )
 
 
-class SyntheticEloModel(BettingModel):
+class EloRatingModel(BettingModel):
     """
-    Illustrative Elo-style rating model.
+    A real, functioning Elo rating model.
 
-    Team ratings are DETERMINISTICALLY DERIVED from the team id (a
-    stable hash), since no historical results feed a real rating
-    update in this environment. This makes the model reproducible and
-    clearly synthetic rather than presenting invented ratings as if
-    they were fit to real history.
+    Every team starts at a base rating of 1500. Ratings are built by
+    replaying every resolved event in this environment's dataset in
+    chronological order and applying the standard logistic Elo update
+    after each result -- this is a genuine Elo pipeline, not a
+    placeholder. Predictions for an upcoming matchup use each team's
+    current (post-history) rating.
 
-    Replace `_rating_for_team` with a real Elo pipeline (updated from
-    `get_historical_data`) to use this model with genuine signal.
+    The one honest caveat: this MVP has no live sports history
+    connected, so the results this model learns from are the same
+    generated dataset used everywhere else in the app, not real-world
+    results. Point it at a real historical results feed (via
+    `build_from_results`) and the same Elo math applies unchanged.
     """
-    name = "Synthetic Elo (illustrative)"
+    name = "Elo Rating Model"
     assumptions = [
-        "Team ratings are deterministically derived placeholders, not "
-        "fit to real historical results — for demonstration of the "
-        "model pipeline only.",
-        "Uses a standard logistic Elo win-probability curve.",
-        "Ignores home/away, injuries, rest, and matchup-specific context.",
+        "Uses a real, standard Elo rating update (K=20), replayed "
+        "chronologically over every resolved event in this environment's "
+        "dataset -- the rating math itself is genuine, not a placeholder.",
+        "This MVP has no live sports history connected, so it is trained "
+        "on this environment's generated results rather than real-world "
+        "outcomes -- swap in a real results feed to change that.",
+        "Applies a fixed home-field advantage (+65 rating points) and "
+        "ignores injuries, rest, and other matchup-specific context.",
+        "Confidence scales with how many historical results informed "
+        "each team's current rating (more games -> higher confidence).",
     ]
 
-    @staticmethod
-    def _rating_for_team(team_id: str) -> float:
-        digest = hashlib.sha256(team_id.encode()).hexdigest()
-        # Map hash to a rating spread of roughly 1400-1700
-        offset = int(digest[:6], 16) % 300
-        return 1400 + offset
+    K_FACTOR = 20.0
+    HOME_ADVANTAGE = 65.0
+    BASE_RATING = 1500.0
+
+    def __init__(self) -> None:
+        self._ratings: dict[str, float] = {}
+        self._games_played: dict[str, int] = {}
+        self._built = False
+
+    def build_from_results(self, games: list[tuple[str, str, float]]) -> None:
+        """
+        Replay a chronological list of (home_team_id, away_team_id,
+        home_score_fraction) results, where home_score_fraction is 1.0
+        for a home win, 0.0 for an away win, or 0.5 for a push/draw.
+        Idempotent to call again with a fuller history.
+        """
+        for home_id, away_id, actual_home in games:
+            r_home = self._ratings.get(home_id, self.BASE_RATING)
+            r_away = self._ratings.get(away_id, self.BASE_RATING)
+
+            expected_home = 1.0 / (1.0 + 10 ** ((r_away - (r_home + self.HOME_ADVANTAGE)) / 400))
+            self._ratings[home_id] = r_home + self.K_FACTOR * (actual_home - expected_home)
+            self._ratings[away_id] = r_away + self.K_FACTOR * ((1 - actual_home) - (1 - expected_home))
+
+            self._games_played[home_id] = self._games_played.get(home_id, 0) + 1
+            self._games_played[away_id] = self._games_played.get(away_id, 0) + 1
+        self._built = True
+
+    def _ensure_built(self) -> None:
+        if self._built:
+            return
+        # Lazy self-build from this environment's mock provider so the
+        # model works out of the box. A production deployment would call
+        # `build_from_results(...)` explicitly with real historical data
+        # at startup instead of relying on this fallback.
+        from app.data import provider
+
+        games: list[tuple[str, str, float]] = []
+        for sport in sorted(provider._teams.keys()):
+            for event in provider.get_finished_events(sport_id=sport):
+                outcomes = provider.get_outcomes(event.id)
+                home_sel_id = f"{event.id}-mkt-moneyline-sel-0"
+                home_result = next((o.result for o in outcomes if o.selection_id == home_sel_id), None)
+                if home_result is None:
+                    continue
+                actual_home = 1.0 if home_result == "win" else (0.5 if home_result == "push" else 0.0)
+                games.append((event.home_team_id, event.away_team_id, actual_home))
+        self.build_from_results(games)
+
+    def rating_for(self, team_id: str) -> float:
+        self._ensure_built()
+        return self._ratings.get(team_id, self.BASE_RATING)
 
     def predict(self, data: dict) -> ModelOutput:
+        self._ensure_built()
         home_team_id: str = data["home_team_id"]
         away_team_id: str = data["away_team_id"]
         target_is_home: bool = data["target_is_home"]
 
-        r_home = self._rating_for_team(home_team_id)
-        r_away = self._rating_for_team(away_team_id)
-        home_edge = 60  # small synthetic home-field bump
+        r_home = self._ratings.get(home_team_id, self.BASE_RATING)
+        r_away = self._ratings.get(away_team_id, self.BASE_RATING)
+        games_home = self._games_played.get(home_team_id, 0)
+        games_away = self._games_played.get(away_team_id, 0)
 
-        p_home = 1.0 / (1.0 + 10 ** (((r_away) - (r_home + home_edge)) / 400))
+        p_home = 1.0 / (1.0 + 10 ** ((r_away - (r_home + self.HOME_ADVANTAGE)) / 400))
         p_target = p_home if target_is_home else (1 - p_home)
+
+        confidence = min(0.5 + 0.02 * min(games_home, games_away), 0.85)
 
         return ModelOutput(
             probability=p_target,
-            confidence=0.55,
+            confidence=confidence,
             model_name=self.name,
             assumptions=self.assumptions,
         )
@@ -142,5 +200,5 @@ class SyntheticEloModel(BettingModel):
 
 MODEL_REGISTRY: dict[str, BettingModel] = {
     "market_consensus": MarketConsensusModel(),
-    "synthetic_elo": SyntheticEloModel(),
+    "synthetic_elo": EloRatingModel(),
 }

@@ -1,69 +1,74 @@
 {% extends "base.html" %}
 {% block title %}Decide{% endblock %}
 {% block page_title %}Decide{% endblock %}
-{% block page_sub %}The final analytical gate between an opportunity and a potential decision{% endblock %}
 
 {% block content %}
 <div class="page-lede">
-  <p>This runs edge, expected value, model confidence, and historical sample size through the selected strategy's rules. A positive expected value alone is never enough — the verdict below explains exactly what was and wasn't met.</p>
+  <p>This runs edge, expected value, model confidence, and historical sample size through the selected strategy's rules. A positive expected value alone is never enough: the verdict below explains exactly what was and wasn't met.</p>
 </div>
 
 <form class="filter-bar" method="get" action="/decide" id="decide-form">
-  <div class="field">
-    <label for="d-sport">Sport</label>
-    <select id="d-sport" name="sport" onchange="document.getElementById('d-event').value=''; document.getElementById('d-selection').value=''; this.form.submit();">
-      <option value="">All sports</option>
-      {% for s in sports %}
-      <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
-      {% endfor %}
-    </select>
+  <div class="filter-bar-search">
+    <div class="field">
+      <label for="d-event">Event</label>
+      <select id="d-event" name="event" onchange="document.getElementById('d-selection').value=''; this.form.submit();">
+        {% for opt in options %}
+        <option value="{{ opt.event.id }}" {% if filters.event==opt.event.id %}selected{% endif %}>
+          {{ opt.event.away_team_name }} @ {{ opt.event.home_team_name }} · {{ opt.event.start_time.strftime('%b %d, %I:%M %p') }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
   </div>
-  <div class="field" style="min-width:240px;">
-    <label for="d-event">Event</label>
-    <select id="d-event" name="event" onchange="document.getElementById('d-selection').value=''; this.form.submit();">
-      {% for opt in options %}
-      <option value="{{ opt.event.id }}" {% if filters.event==opt.event.id %}selected{% endif %}>
-        {{ opt.event.away_team_name }} @ {{ opt.event.home_team_name }} · {{ opt.event.start_time.strftime('%b %d') }}
-      </option>
-      {% endfor %}
-    </select>
+  <div class="filter-bar-grid">
+    <div class="field">
+      <label for="d-sport">Sport</label>
+      <select id="d-sport" name="sport" onchange="document.getElementById('d-event').value=''; document.getElementById('d-selection').value=''; this.form.submit();">
+        <option value="">All sports</option>
+        {% for s in sports %}
+        <option value="{{ s.id }}" {% if filters.sport==s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="d-selection">Selection</label>
+      <select id="d-selection" name="selection" onchange="this.form.submit()">
+        {% set chosen_option = options|selectattr('event.id','equalto',filters.event)|first %}
+        {% if chosen_option %}
+        {% for sel in chosen_option.selections %}
+        <option value="{{ sel.id }}" {% if filters.selection==sel.id %}selected{% endif %}>{{ sel.name }}</option>
+        {% endfor %}
+        {% endif %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="d-strategy">Strategy</label>
+      <select id="d-strategy" name="strategy_id" onchange="this.form.submit()">
+        {% for s in strategies %}
+        <option value="{{ s.id }}" {% if filters.strategy_id==s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="d-model">Model</label>
+      <select id="d-model" name="model" onchange="this.form.submit()">
+        {% for key, m in models.items() %}
+        <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="d-unit">Unit ($)</label>
+      <input type="number" id="d-unit" name="unit_size" min="1" step="1" value="{{ filters.unit_size }}">
+    </div>
+    <div class="field">
+      <label for="d-bankroll">Bankroll ($)</label>
+      <input type="number" id="d-bankroll" name="bankroll" min="1" step="10" value="{{ filters.bankroll }}">
+    </div>
+    <div class="filter-bar-actions">
+      <button class="btn btn-primary" type="submit">Evaluate</button>
+    </div>
   </div>
-  <div class="field">
-    <label for="d-selection">Selection</label>
-    <select id="d-selection" name="selection" onchange="this.form.submit()">
-      {% set chosen_option = options|selectattr('event.id','equalto',filters.event)|first %}
-      {% if chosen_option %}
-      {% for sel in chosen_option.selections %}
-      <option value="{{ sel.id }}" {% if filters.selection==sel.id %}selected{% endif %}>{{ sel.name }}</option>
-      {% endfor %}
-      {% endif %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="d-strategy">Strategy</label>
-    <select id="d-strategy" name="strategy_id" onchange="this.form.submit()">
-      {% for s in strategies %}
-      <option value="{{ s.id }}" {% if filters.strategy_id==s.id %}selected{% endif %}>{{ s.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="d-model">Model</label>
-    <select id="d-model" name="model" onchange="this.form.submit()">
-      {% for key, m in models.items() %}
-      <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="d-unit">Unit ($)</label>
-    <input type="number" id="d-unit" name="unit_size" min="1" step="1" value="{{ filters.unit_size }}" style="width:80px;">
-  </div>
-  <div class="field">
-    <label for="d-bankroll">Bankroll ($)</label>
-    <input type="number" id="d-bankroll" name="bankroll" min="1" step="10" value="{{ filters.bankroll }}" style="width:100px;">
-  </div>
-  <button class="btn btn-primary" type="submit">Evaluate</button>
 </form>
 
 {% if not options %}
@@ -113,7 +118,7 @@
 {% if stakes %}
 <div class="card">
   <h3>Stake sizing (analytical outputs, not guarantees)</h3>
-  <p style="font-size:0.82rem;">Stake sizing is deliberately separate from the decision above — even a Strong Candidate can warrant a small stake if you prefer to manage variance conservatively.</p>
+  <p style="font-size:0.82rem;">Stake sizing is deliberately separate from the decision above: even a Strong Candidate can warrant a small stake if you prefer to manage variance conservatively.</p>
   <div class="stat-row">
     <div class="stat"><span class="stat-label">Fixed unit (strategy max)</span><span class="stat-value">${{ '%.2f'|format(stakes.fixed_unit) }}</span></div>
     <div class="stat"><span class="stat-label">2% of bankroll</span><span class="stat-value">${{ '%.2f'|format(stakes.percent_bankroll_2pct) }}</span></div>
@@ -123,7 +128,7 @@
       <span class="stat-value">${{ '%.2f'|format(stakes.kelly_fractional) }}</span>
     </div>
   </div>
-  <form method="get" action="/decide" style="margin-top:0.75rem; display:flex; align-items:flex-end; gap:0.6rem;">
+  <form method="get" action="/decide" class="filter-bar" style="margin-top:1rem; border:none; background:none;">
     <input type="hidden" name="sport" value="{{ filters.sport or '' }}">
     <input type="hidden" name="event" value="{{ filters.event }}">
     <input type="hidden" name="selection" value="{{ filters.selection }}">
@@ -131,11 +136,15 @@
     <input type="hidden" name="model" value="{{ filters.model }}">
     <input type="hidden" name="unit_size" value="{{ filters.unit_size }}">
     <input type="hidden" name="bankroll" value="{{ filters.bankroll }}">
-    <div class="field">
-      <label for="d-kelly">Kelly fraction (%)</label>
-      <input type="number" id="d-kelly" name="kelly_fraction_pct" min="1" max="100" step="1" value="{{ filters.kelly_fraction_pct }}" style="width:90px;">
+    <div class="filter-bar-grid" style="padding:0; grid-template-columns: 160px auto 1fr;">
+      <div class="field">
+        <label for="d-kelly">Kelly fraction (%)</label>
+        <input type="number" id="d-kelly" name="kelly_fraction_pct" min="1" max="100" step="1" value="{{ filters.kelly_fraction_pct }}">
+      </div>
+      <div class="filter-bar-actions" style="justify-content:flex-start;">
+        <button class="btn" type="submit">Recalculate</button>
+      </div>
     </div>
-    <button class="btn" type="submit">Recalculate</button>
   </form>
 </div>
 {% endif %}

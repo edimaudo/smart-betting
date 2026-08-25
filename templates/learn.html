@@ -1,48 +1,84 @@
 {% extends "base.html" %}
 {% block title %}Learn{% endblock %}
 {% block page_title %}Learn{% endblock %}
-{% block page_sub %}The concepts the rest of the application builds on{% endblock %}
 
 {% block content %}
 <div class="page-lede">
-  <p>Read through these five sections in order, then take the 10-question quiz to check your understanding before moving into the Learner Simulator. Nothing here requires real money.</p>
+  <p>Work through Overview, then use the Glossary as a reference, then take the Quiz to check your understanding before moving into the Learner Simulator. Nothing here requires real money.</p>
 </div>
 
-<nav class="learn-toc" aria-label="Learn sections">
-  <a href="#overview">Betting overview</a>
-  <a href="#key-terms">Key terms</a>
-  <a href="#approaches">Approaches</a>
-  <a href="#upsides-downsides">Upsides &amp; downsides</a>
-  <a href="#strategic-thinking">Strategic thinking</a>
-</nav>
+<div class="tabs">
+  <ul class="tab-list" role="tablist" aria-label="Learn sections">
+    <li><button class="tab-btn" role="tab" id="tab-btn-overview" aria-selected="{{ 'true' if active_tab=='overview' else 'false' }}" aria-controls="tab-panel-overview" data-tab="overview">Overview</button></li>
+    <li><button class="tab-btn" role="tab" id="tab-btn-glossary" aria-selected="{{ 'true' if active_tab=='glossary' else 'false' }}" aria-controls="tab-panel-glossary" data-tab="glossary">Glossary</button></li>
+    <li><button class="tab-btn" role="tab" id="tab-btn-quiz" aria-selected="{{ 'true' if active_tab=='quiz' else 'false' }}" aria-controls="tab-panel-quiz" data-tab="quiz">Quiz</button></li>
+  </ul>
+</div>
 
-<section class="section" id="overview">
-  <div class="section-head"><h2>1. Betting overview</h2></div>
-  <div class="card">
-    <h3>What betting is</h3>
-    <p>A bet is a contract: you stake money on a specific outcome, and a sportsbook pays you a pre-agreed price if that outcome happens. Everything downstream — odds, payouts, edge — follows from that simple contract.</p>
+<!-- ======================= OVERVIEW ======================= -->
+<div class="tab-panel {{ 'active' if active_tab=='overview' else '' }}" id="tab-panel-overview" role="tabpanel" aria-labelledby="tab-btn-overview">
 
-    <h3>How sportsbooks and markets work</h3>
-    <p>A sportsbook sets a <strong>market</strong> for an event — for example, a moneyline market for who wins outright, a spread market for margin of victory, or a total market for combined points. Each market has two or more <strong>selections</strong>, each priced with its own <strong>odds</strong>. Odds move as money comes in and as the book's own view of the event changes; comparing odds across books and across time is a core input to analysis.</p>
+  <div class="card" style="margin-bottom:1.5rem;">
+    <h3>What a bet actually is</h3>
+    <p>A bet is a contract. You stake money on a specific outcome, and a sportsbook pays you a pre-agreed price if that outcome happens. If it doesn't, you lose the stake. Every other concept on this page (odds, probability, edge, expected value) is just a way of reasoning about that one contract more precisely.</p>
 
-    <h3>How odds and payouts work</h3>
-    <p>Odds express both a price and, implicitly, a probability. Decimal odds of 2.20 mean a $10 stake returns $22 total ($12 profit) if you win. American odds of +150 mean a $100 stake wins $150 profit; American odds of −150 mean you must stake $150 to win $100 profit. If the outcome doesn't happen, the stake is lost.</p>
+    <h3>How markets and prices work</h3>
+    <p>A sportsbook sets a <strong>market</strong> for an event: a moneyline market for who wins outright, a spread market for margin of victory, or a total market for combined points. Each market has two or more <strong>selections</strong>, each with its own <strong>odds</strong>. Prices move as money comes in and as the book's own view of the event changes, which is why comparing odds across books and across time is a useful input to analysis.</p>
 
     <h3>Probability, implied probability, and margin</h3>
-    <p>Every price implies a probability — the break-even chance of winning at that price. Sum the implied probabilities of every selection in a market and the total is normally above 100%. That excess is the <strong>bookmaker margin</strong> (the "vig" or "juice"): the sportsbook's built-in edge, independent of who actually wins. Removing it (de-vigging) is required before comparing a model's probability to the market's fairly.</p>
+    <p>Every price implies a probability: the break-even chance of winning at that price. Add up the implied probabilities of every selection in a market and the total is normally above 100%. That excess is the <strong>bookmaker margin</strong>, often called the "vig" or "juice": the sportsbook's built-in edge, independent of who actually wins. Removing it ("de-vigging") is required before comparing a model's probability to the market's fairly.</p>
   </div>
-</section>
 
-<section class="section" id="key-terms">
-  <div class="section-head">
-    <h2>2. Key terms</h2>
-    <span class="eyebrow">Searchable glossary</span>
-  </div>
-  <div class="card">
-    <div class="field" style="margin-bottom:1rem; max-width:320px;">
-      <label for="glossary-search">Search terms</label>
-      <input type="search" id="glossary-search" placeholder="e.g. edge, vig, closing line…" autocomplete="off">
+  <div class="card" style="margin-bottom:1.5rem;">
+    <h3>How people try to estimate that probability</h3>
+    <p>Nobody has a direct line to the true probability of an outcome, so different approaches try to estimate it in different ways. Most real analysis blends several of these:</p>
+    <div class="card-grid" style="margin-top:1rem;">
+      <div class="card"><h3>Fundamental</h3><p>Rosters, injuries, matchups, weather, travel: the underlying factors that plausibly drive the outcome.</p></div>
+      <div class="card"><h3>Statistical</h3><p>Historical rates and distributions rather than narrative, used to estimate likelihood directly.</p></div>
+      <div class="card"><h3>Market-based</h3><p>Treating the price itself, and how it moves, as the primary source of information.</p></div>
+      <div class="card"><h3>Trend-based</h3><p>Recent form or streaks. A useful signal, but easy to overweight given how small the sample usually is.</p></div>
+      <div class="card"><h3>Value-based</h3><p>Asking whether a price is favorable relative to true probability, not just who is more likely to win.</p></div>
+      <div class="card"><h3>Model-driven</h3><p>An explicit, repeatable model produces the probability estimate, rather than judgment alone.</p></div>
+      <div class="card"><h3>Risk-based</h3><p>Sizing and selecting bets by bankroll management and variance tolerance, not expected return alone.</p></div>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:1.5rem;">
+    <h3>What that means for risk</h3>
+    <div class="risk-banner" role="note" style="margin-bottom:1rem;">
+      <span aria-hidden="true">⚠</span>
+      <span><strong>Betting involves financial risk.</strong> A structured process can improve decision quality over time, but it guarantees nothing for any individual bet. Only wager money you can afford to lose.</span>
+    </div>
+    <p>A structured process (probability, edge, expected value, risk) replaces guesswork with something explainable and repeatable, but it doesn't remove the underlying risk. Every bet risks the full stake, and a real edge can still lose in the short run: variance means results over a handful of bets can diverge a lot from the long-run expectation. Models rest on assumptions that can be wrong or stale, and data can be sparse or delayed, especially for less common markets. The most common and most avoidable failure isn't a bad model; it's behavior: chasing losses, ignoring your own strategy's rules, or treating a single win as proof a decision was correct.</p>
+  </div>
+
+  <div class="card">
+    <h3>The strategic frame this app uses</h3>
+    <p>Every opportunity in this application is run through the same chain of reasoning:</p>
+    <div class="concept-flow" role="img" aria-label="Probability leads to Odds, leads to Implied Probability, leads to Edge, leads to Expected Value, leads to Risk">
+      <span class="step">Probability</span><span class="arrow">→</span>
+      <span class="step">Odds</span><span class="arrow">→</span>
+      <span class="step">Implied Probability</span><span class="arrow">→</span>
+      <span class="step">Edge</span><span class="arrow">→</span>
+      <span class="step">Expected Value</span><span class="arrow">→</span>
+      <span class="step">Risk</span>
+    </div>
+    <p style="margin-top:1rem;">A price only becomes interesting when your estimated probability is meaningfully higher than what the market's price implies (edge), that edge translates into positive expected value, and the risk fits your strategy. <strong>The goal is never to simply predict who will win. It's to evaluate whether the available price justifies taking the risk.</strong></p>
+  </div>
+</div>
+
+<!-- ======================= GLOSSARY ======================= -->
+<div class="tab-panel {{ 'active' if active_tab=='glossary' else '' }}" id="tab-panel-glossary" role="tabpanel" aria-labelledby="tab-btn-glossary">
+  <form class="filter-bar" onsubmit="return false;">
+    <div class="filter-bar-search">
+      <div class="field">
+        <label for="glossary-search">Filter terms</label>
+        <input type="search" id="glossary-search" placeholder="e.g. edge, vig, closing line…" autocomplete="off">
+      </div>
+    </div>
+  </form>
+
+  <div class="card">
     <p class="glossary-empty" id="glossary-empty" hidden>No terms match "<span id="glossary-empty-query"></span>".</p>
     <dl class="glossary" id="glossary-list">
       <div class="glossary-item" data-term="moneyline">
@@ -58,16 +94,16 @@
         <dt>Over / Under</dt><dd>The two sides of a total bet: whether the combined score finishes above (over) or below (under) the line.</dd>
       </div>
       <div class="glossary-item" data-term="prop proposition">
-        <dt>Prop</dt><dd>A "proposition" bet on a specific occurrence within an event, separate from the final result — e.g. a player's point total.</dd>
+        <dt>Prop</dt><dd>A "proposition" bet on a specific occurrence within an event, separate from the final result, such as a player's point total.</dd>
       </div>
       <div class="glossary-item" data-term="parlay">
         <dt>Parlay</dt><dd>A single bet combining multiple selections; all of them must win for the parlay to pay out, which multiplies both the payout and the risk.</dd>
       </div>
       <div class="glossary-item" data-term="decimal odds">
-        <dt>Decimal odds</dt><dd>Odds expressed as a single multiplier of the stake, including the stake itself — e.g. 2.50 returns 2.5x the stake.</dd>
+        <dt>Decimal odds</dt><dd>Odds expressed as a single multiplier of the stake, including the stake itself. For example, 2.50 returns 2.5x the stake.</dd>
       </div>
       <div class="glossary-item" data-term="american odds moneyline">
-        <dt>American odds</dt><dd>Odds expressed relative to a $100 stake — a positive number is profit on a $100 bet, a negative number is the stake needed to profit $100.</dd>
+        <dt>American odds</dt><dd>Odds expressed relative to a $100 stake. A positive number is profit on a $100 bet; a negative number is the stake needed to profit $100.</dd>
       </div>
       <div class="glossary-item" data-term="implied probability">
         <dt>Implied probability</dt><dd>The break-even win probability represented by a given price, before removing the bookmaker's margin.</dd>
@@ -79,10 +115,10 @@
         <dt>Bankroll</dt><dd>The total pool of money set aside for betting, used as the base for sizing individual stakes.</dd>
       </div>
       <div class="glossary-item" data-term="unit stake sizing">
-        <dt>Unit</dt><dd>A standardized stake size (e.g. 1% of bankroll) used so bet sizes can be compared independent of bankroll size.</dd>
+        <dt>Unit</dt><dd>A standardized stake size, such as 1% of bankroll, used so bet sizes can be compared independent of bankroll size.</dd>
       </div>
       <div class="glossary-item" data-term="edge">
-        <dt>Edge</dt><dd>The gap between a model's estimated probability and the market's (de-vigged) implied probability for the same outcome.</dd>
+        <dt>Edge</dt><dd>The gap between a model's estimated probability and the market's de-vigged implied probability for the same outcome.</dd>
       </div>
       <div class="glossary-item" data-term="expected value ev">
         <dt>Expected value (EV)</dt><dd>The average profit or loss a bet would produce if the same price and probability were repeated many times.</dd>
@@ -94,67 +130,50 @@
         <dt>Line movement</dt><dd>How a price changes between opening and closing, reflecting new information or the balance of money on each side.</dd>
       </div>
       <div class="glossary-item" data-term="push tie">
-        <dt>Push</dt><dd>A result that exactly matches the line (e.g. a spread bet landing on the exact margin), returning the stake with no win or loss.</dd>
+        <dt>Push</dt><dd>A result that exactly matches the line, such as a spread bet landing on the exact margin, returning the stake with no win or loss.</dd>
       </div>
     </dl>
   </div>
-</section>
-
-<section class="section" id="approaches">
-  <div class="section-head"><h2>3. Betting approaches</h2></div>
-  <div class="card-grid">
-    <div class="card"><h3>Fundamental analysis</h3><p>Evaluating the underlying factors that drive outcomes — rosters, injuries, matchups, weather, travel.</p></div>
-    <div class="card"><h3>Statistical analysis</h3><p>Using historical rates and distributions rather than narrative to estimate the likelihood of outcomes.</p></div>
-    <div class="card"><h3>Market-based analysis</h3><p>Treating the market price itself, and how it moves, as the primary source of information.</p></div>
-    <div class="card"><h3>Trend-based analysis</h3><p>Looking at recent form or streaks — useful as a signal, but prone to overweighting small samples.</p></div>
-    <div class="card"><h3>Value-based analysis</h3><p>Asking whether a price is favorable relative to true probability, rather than only asking who will win.</p></div>
-    <div class="card"><h3>Model-driven analysis</h3><p>Producing a probability estimate from an explicit, repeatable model rather than judgment alone.</p></div>
-    <div class="card"><h3>Risk-based approaches</h3><p>Sizing and selecting bets according to bankroll management and variance tolerance, not just expected return.</p></div>
-  </div>
-</section>
-
-<section class="section" id="upsides-downsides">
-  <div class="section-head"><h2>4. Upsides &amp; downsides</h2></div>
-  <div class="risk-banner" role="note">
-    <span aria-hidden="true">⚠</span>
-    <span><strong>Betting involves financial risk.</strong> Structured analysis can improve decision quality over time, but it does not guarantee any individual outcome. Only wager money you can afford to lose.</span>
-  </div>
-  <div class="card-grid">
-    <div class="card"><h3>Analytical benefits</h3><p>A structured process — probability, edge, EV, risk — replaces guesswork with an explainable, repeatable framework.</p></div>
-    <div class="card"><h3>Financial risk</h3><p>Every bet risks the full stake. Positive expected value over time does not prevent losses on any single bet.</p></div>
-    <div class="card"><h3>Variance</h3><p>Short-run results can diverge substantially from long-run expectation, even when the underlying edge is real.</p></div>
-    <div class="card"><h3>Model error</h3><p>Every model rests on assumptions that can be wrong, incomplete, or stale relative to the current matchup.</p></div>
-    <div class="card"><h3>Data limitations</h3><p>Historical and market data can be sparse, delayed, or unavailable for some markets, weakening any conclusion drawn from it.</p></div>
-    <div class="card"><h3>Behavioral risks</h3><p>Chasing losses, ignoring a strategy's own rules, and stopping analysis after a win are common, costly patterns.</p></div>
-    <div class="card"><h3>Overconfidence</h3><p>A model producing a precise-looking number does not make that number more certain than the data underneath it.</p></div>
-  </div>
-</section>
-
-<section class="section" id="strategic-thinking">
-  <div class="section-head"><h2>5. Strategic thinking</h2></div>
-  <div class="card">
-    <p>Every opportunity in this application is evaluated through the same chain of reasoning:</p>
-    <div class="concept-flow" role="img" aria-label="Probability leads to Odds, leads to Implied Probability, leads to Edge, leads to Expected Value, leads to Risk">
-      <span class="step">Probability</span><span class="arrow">→</span>
-      <span class="step">Odds</span><span class="arrow">→</span>
-      <span class="step">Implied Probability</span><span class="arrow">→</span>
-      <span class="step">Edge</span><span class="arrow">→</span>
-      <span class="step">Expected Value</span><span class="arrow">→</span>
-      <span class="step">Risk</span>
-    </div>
-    <p style="margin-top:1rem;">A price only becomes interesting when your estimated probability is meaningfully higher than what the market's price implies (edge), that edge translates into positive expected value, and the risk involved fits your strategy. <strong>The goal is never to simply predict who will win — it's to evaluate whether the available price justifies taking the risk.</strong></p>
-  </div>
-</section>
-
-<div class="card" style="display:flex; flex-wrap:wrap; gap:1rem; align-items:center; justify-content:space-between;">
-  <div>
-    <h3 style="margin-bottom:0.2rem;">Ready to check your understanding?</h3>
-    <p style="margin:0;">Take the 10-question quiz. Scoring 80% or higher unlocks the Learner Simulator.</p>
-  </div>
-  <a class="btn btn-primary" href="/learn/quiz">Start the quiz →</a>
 </div>
+
+<!-- ======================= QUIZ ======================= -->
+<div class="tab-panel {{ 'active' if active_tab=='quiz' else '' }}" id="tab-panel-quiz" role="tabpanel" aria-labelledby="tab-btn-quiz">
+  <div class="card quiz-card" id="quiz-root">
+    <div class="quiz-progress">
+      <span id="quiz-progress-label">Question 1 of 10</span>
+      <span id="quiz-progress-score">Score: 0</span>
+    </div>
+    <div class="quiz-progress-track"><div class="quiz-progress-fill" id="quiz-progress-fill" style="width:10%;"></div></div>
+
+    <div id="quiz-question-view">
+      <p class="quiz-question" id="quiz-question-text"></p>
+      <ul class="quiz-options" id="quiz-options" role="radiogroup" aria-labelledby="quiz-question-text"></ul>
+      <div class="quiz-feedback" id="quiz-feedback" role="status" aria-live="polite" hidden>
+        <div class="quiz-feedback-title" id="quiz-feedback-title"></div>
+        <div id="quiz-feedback-explanation"></div>
+      </div>
+      <div class="quiz-nav">
+        <button class="btn btn-primary" id="quiz-next-btn" disabled>Next question</button>
+      </div>
+    </div>
+
+    <div id="quiz-result-view" class="quiz-result" hidden aria-live="polite">
+      <p class="eyebrow">Final score</p>
+      <div class="quiz-score" id="quiz-final-score">0 / 10</div>
+      <span class="quiz-classification" id="quiz-classification"></span>
+      <p id="quiz-classification-note" style="max-width:44ch; margin:1rem auto;"></p>
+      <div style="display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap;">
+        <button class="btn" id="quiz-retry-btn">Retake quiz</button>
+        <a class="btn btn-primary" id="quiz-simulator-link" href="/learn/simulator">Go to Learner Simulator →</a>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/js/glossary.js"></script>
+<script src="/static/js/quiz.js"></script>
+<script src="/static/js/learn-tabs.js"></script>
 {% endblock %}

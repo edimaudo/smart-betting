@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Smart Betting{% endblock %} · Smart Betting</title>
+  <title>{% block title %}SmartBet{% endblock %} · SmartBet</title>
   <meta name="description" content="Sports betting education, analytics, simulation, and decision support.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/app.css">
   <script>
     /* Apply persisted theme/font-size before paint to avoid a flash. */
@@ -27,9 +27,9 @@
   <div class="app-shell">
     <nav class="sidebar" id="sidebar" aria-label="Primary">
       <a class="brand" href="/">
-        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-mark" aria-hidden="true">S</span>
         <span>
-          <span class="brand-name" style="display:block;">Smart Betting</span>
+          <span class="brand-name" style="display:block;">SmartBet</span>
           <span class="brand-tag">DECISION SUPPORT</span>
         </span>
       </a>
@@ -45,9 +45,19 @@
         <li><a class="nav-link" href="/decide" data-nav="decide"><span class="nav-index">08</span>Decide</a></li>
       </ul>
 
+      {% set ds = data_status() %}
       <p class="sidebar-footer">
-        Decision-support tool. Not a guarantee of outcomes. Betting involves financial risk — see
-        <a href="/learn#upsides-downsides">Learn → Risks</a>.
+        <span class="badge {{ 'badge-signal' if ds.mode == 'live' else 'badge-neutral' }}" style="margin-bottom:0.5rem;">
+          {{ 'Live odds' if ds.mode == 'live' else 'Sample data' }}
+        </span><br>
+        {% if ds.mode == 'live' %}
+          Real sportsbook odds via The Odds API.
+        {% elif ds.configured %}
+          A live data key is set, but the last request failed, so this is showing sample data. See server logs.
+        {% else %}
+          No ODDS_API_KEY configured, so this is showing deterministic sample data. See README to enable live odds.
+        {% endif %}
+        Not a guarantee of outcomes. Betting involves financial risk; see <a href="/learn">Learn</a>.
       </p>
     </nav>
 
@@ -59,7 +69,6 @@
           </button>
           <div class="topbar-title">
             <h1>{% block page_title %}Overview{% endblock %}</h1>
-            <span>{% block page_sub %}Structured, evidence-based betting decisions{% endblock %}</span>
           </div>
         </div>
 

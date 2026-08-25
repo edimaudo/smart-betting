@@ -1,40 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Strategies{% endblock %}
 {% block page_title %}Strategies{% endblock %}
-{% block page_sub %}Configurable rules for what counts as an opportunity{% endblock %}
 
 {% block content %}
 <div class="page-lede">
-  <p>A strategy is a set of thresholds — minimum edge, minimum expected value, minimum model confidence — that an opportunity must clear before it's worth a closer look. This page scans upcoming moneyline markets against the selected strategy.</p>
+  <p>A strategy is a set of thresholds: minimum edge, minimum expected value, minimum model confidence, that an opportunity must clear before it's worth a closer look. This page scans upcoming moneyline markets against the selected strategy.</p>
 </div>
 
 <form class="filter-bar" method="get" action="/strategies">
-  <div class="field" style="min-width:220px;">
-    <label for="st-strategy">Strategy</label>
-    <select id="st-strategy" name="strategy_id" onchange="this.form.submit()">
-      {% for s in strategies %}
-      <option value="{{ s.id }}" {% if filters.strategy_id==s.id %}selected{% endif %}>{{ s.name }}</option>
-      {% endfor %}
-    </select>
+  <div class="filter-bar-grid">
+    <div class="field">
+      <label for="st-strategy">Strategy</label>
+      <select id="st-strategy" name="strategy_id" onchange="this.form.submit()">
+        {% for s in strategies %}
+        <option value="{{ s.id }}" {% if filters.strategy_id==s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="st-model">Model</label>
+      <select id="st-model" name="model" onchange="this.form.submit()">
+        {% for key, m in models.items() %}
+        <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="st-sport">Sport</label>
+      <select id="st-sport" name="sport" onchange="this.form.submit()">
+        <option value="">All sports</option>
+        <option value="nba" {% if filters.sport=='nba' %}selected{% endif %}>Basketball (NBA)</option>
+        <option value="nfl" {% if filters.sport=='nfl' %}selected{% endif %}>Football (NFL)</option>
+        <option value="epl" {% if filters.sport=='epl' %}selected{% endif %}>Soccer (EPL)</option>
+      </select>
+    </div>
+    <div class="filter-bar-actions">
+      <button class="btn btn-primary" type="submit">Rescan</button>
+    </div>
   </div>
-  <div class="field">
-    <label for="st-model">Model</label>
-    <select id="st-model" name="model" onchange="this.form.submit()">
-      {% for key, m in models.items() %}
-      <option value="{{ key }}" {% if filters.model==key %}selected{% endif %}>{{ m.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="st-sport">Sport</label>
-    <select id="st-sport" name="sport" onchange="this.form.submit()">
-      <option value="">All sports</option>
-      <option value="nba" {% if filters.sport=='nba' %}selected{% endif %}>Basketball (NBA)</option>
-      <option value="nfl" {% if filters.sport=='nfl' %}selected{% endif %}>Football (NFL)</option>
-      <option value="epl" {% if filters.sport=='epl' %}selected{% endif %}>Soccer (EPL)</option>
-    </select>
-  </div>
-  <button class="btn" type="submit">Rescan</button>
 </form>
 
 <div class="card" style="margin-bottom:1.25rem;">

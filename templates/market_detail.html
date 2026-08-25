@@ -1,10 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ event.away_team_name }} @ {{ event.home_team_name }}{% endblock %}
 {% block page_title %}{{ event.away_team_name }} @ {{ event.home_team_name }}{% endblock %}
-{% block page_sub %}{{ event.sport_name }} · {{ event.start_time.strftime('%b %d, %I:%M %p') }} UTC · {{ event.status.value|capitalize }}{% endblock %}
 
 {% block content %}
 <p><a href="/markets">← Back to Markets</a></p>
+
+<div class="page-lede">
+  <p>{{ event.sport_name }} · {{ event.start_time.strftime('%b %d, %I:%M %p') }} UTC · {{ event.status.value|capitalize }}</p>
+</div>
 
 {% for block in market_blocks %}
 <div class="section">

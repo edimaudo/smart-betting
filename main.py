@@ -1,5 +1,5 @@
 """
-Smart Betting — FastAPI application entrypoint.
+SmartBet: FastAPI application entrypoint.
 
 Server-rendered (FastAPI + Jinja2) per requirements.md section 1.
 HTML routes live here; JSON API routes live in app/api.py and are
@@ -7,18 +7,18 @@ mounted under /api, kept conceptually separate per section 28.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Optional
 
-from fastapi import FastAPI, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.api import router as api_router
 from app.calculations.odds import to_decimal
 from app.calculations.stake import fixed_unit_stake, kelly_stake, percentage_bankroll_stake
-from app.data.mock_provider import provider
+from app.data import provider
 from app.decision.engine import DecisionEngine, DecisionInput
 from app.models.entities import EventStatus, Strategy
 from app.models.prediction import MODEL_REGISTRY
@@ -33,11 +33,14 @@ from app.strategies.engine import DEFAULT_STRATEGIES, engine as strategy_engine
 from app.simulation.backtest import BacktestEngine
 from app.simulation.monte_carlo import run_monte_carlo
 
-app = FastAPI(title="Smart Betting")
+app = FastAPI(title="SmartBet")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(api_router)
 
 templates = Jinja2Templates(directory="templates")
+templates.env.globals["data_status"] = lambda: {
+    "mode": provider.mode, "configured": provider.configured, "error": provider.last_error,
+}
 
 decision_engine = DecisionEngine()
 backtest_engine = BacktestEngine(decision_engine)
@@ -49,6 +52,41 @@ def _strategy_or_default(strategy_id: Optional[str]) -> Strategy:
     return STRATEGIES_BY_ID.get(strategy_id, DEFAULT_STRATEGIES[0])
 
 
+# ----------------------------------------------------------------------------
+# Query params arrive as plain strings from HTML forms — including an empty
+# string "" for any <select> left on "All ..." or a cleared date/number
+# field. FastAPI's typed Optional[date]/Optional[int] params reject "" as
+# invalid and return a raw 422 JSON error instead of the page, so every
+# optional date/int/float filter below is accepted as a plain string and
+# parsed here, tolerating blank or malformed input instead of crashing.
+# ----------------------------------------------------------------------------
+def _parse_date(value: Optional[str]) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _parse_int(value: Optional[str]) -> Optional[int]:
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _parse_float(value: Optional[str], default: float) -> float:
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
 # ============================================================================
 # 1. Overview
 # ============================================================================
@@ -56,12 +94,15 @@ def _strategy_or_default(strategy_id: Optional[str]) -> Strategy:
 async def overview(
     request: Request,
     sport: Optional[str] = None,
-    on_date: Optional[date] = Query(None, alias="date"),
+    date: Optional[str] = None,
     market_type: str = "moneyline",
     q: Optional[str] = None,
 ):
+    on_date = _parse_date(date)
     sports = await list_sports()
-    events = await list_events(sport_id=sport, on_date=on_date, search=q, limit=24)
+    events = await list_events(
+        sport_id=sport, on_date=on_date, search=q, status=EventStatus.SCHEDULED, limit=24,
+    )
 
     cards = []
     for event in events:
@@ -83,13 +124,15 @@ async def overview(
 # 2. Learn
 # ============================================================================
 @app.get("/learn", response_class=HTMLResponse)
-async def learn(request: Request):
-    return templates.TemplateResponse("learn.html", {"request": request})
+async def learn(request: Request, tab: str = "overview"):
+    if tab not in ("overview", "glossary", "quiz"):
+        tab = "overview"
+    return templates.TemplateResponse("learn.html", {"request": request, "active_tab": tab})
 
 
-@app.get("/learn/quiz", response_class=HTMLResponse)
-async def learn_quiz(request: Request):
-    return templates.TemplateResponse("quiz.html", {"request": request})
+@app.get("/learn/quiz")
+async def learn_quiz():
+    return RedirectResponse(url="/learn?tab=quiz")
 
 
 @app.get("/learn/simulator", response_class=HTMLResponse)
@@ -104,19 +147,24 @@ async def learn_simulator(request: Request):
 async def markets(
     request: Request,
     sport: Optional[str] = None,
-    on_date: Optional[date] = Query(None, alias="date"),
+    date: Optional[str] = None,
     market_type: str = "moneyline",
     q: Optional[str] = None,
     sportsbook: Optional[str] = None,
 ):
+    on_date = _parse_date(date)
     sports = await list_sports()
-    events = await list_events(sport_id=sport, on_date=on_date, search=q, limit=40)
+    events = await list_events(
+        sport_id=sport, on_date=on_date, search=q, status=EventStatus.SCHEDULED, limit=40,
+    )
 
     rows = []
+    all_books: set[str] = set()
     for event in events:
         market, selections, odds = await get_market_bundle(event.id, market_type)
         if not market:
             continue
+        all_books.update(o.sportsbook for o in odds if not o.is_opening)
         if sportsbook:
             odds = [o for o in odds if o.sportsbook == sportsbook]
         current = [o for o in odds if not o.is_opening]
@@ -124,7 +172,7 @@ async def markets(
             continue
         rows.append({"event": event, "market": market, "selections": selections, "odds": current})
 
-    books = sorted({b for e in events for m in (await get_market_bundle(e.id, market_type))[2] for b in [m.sportsbook]}) if False else ["Northgate", "Pinbook", "Meridian Bet", "Harborline"]
+    books = sorted(all_books)
 
     return templates.TemplateResponse("markets.html", {
         "request": request, "sports": sports, "rows": rows, "sportsbooks": books,
@@ -171,20 +219,24 @@ async def market_detail(request: Request, event_id: str):
 async def history(
     request: Request,
     sport: Optional[str] = None,
-    season: Optional[int] = None,
+    season: Optional[str] = None,
     team: Optional[str] = None,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
 ):
+    season_i = _parse_int(season)
+    from_d = _parse_date(date_from)
+    to_d = _parse_date(date_to)
+
     sports = await list_sports()
     events = await list_events(sport_id=sport, status=EventStatus.FINAL, limit=500)
 
-    if season:
-        events = [e for e in events if e.start_time.year == season]
-    if date_from:
-        events = [e for e in events if e.start_time.date() >= date_from]
-    if date_to:
-        events = [e for e in events if e.start_time.date() <= date_to]
+    if season_i:
+        events = [e for e in events if e.start_time.year == season_i]
+    if from_d:
+        events = [e for e in events if e.start_time.date() >= from_d]
+    if to_d:
+        events = [e for e in events if e.start_time.date() <= to_d]
     if team:
         needle = team.lower()
         events = [e for e in events if needle in (e.home_team_name or "").lower() or needle in (e.away_team_name or "").lower()]
@@ -197,7 +249,7 @@ async def history(
         if not market:
             continue
         closing = {o.selection_id: o for o in odds if o.is_closing}
-        outcomes = {o.selection_id: o.result for o in provider._outcomes.get(event.id, [])}
+        outcomes = {o.selection_id: o.result for o in provider.get_outcomes(event.id)}
         rows.append({
             "event": event, "selections": selections,
             "closing": closing, "outcomes": outcomes,
@@ -207,7 +259,7 @@ async def history(
 
     return templates.TemplateResponse("history.html", {
         "request": request, "sports": sports, "rows": rows, "seasons": seasons,
-        "filters": {"sport": sport, "season": season, "team": team or "", "date_from": date_from, "date_to": date_to},
+        "filters": {"sport": sport, "season": season_i, "team": team or "", "date_from": from_d, "date_to": to_d},
     })
 
 
@@ -221,8 +273,9 @@ async def analyze(
     event: Optional[str] = None,
     selection: Optional[str] = None,
     model: str = "synthetic_elo",
-    stake: float = 10.0,
+    stake: Optional[str] = None,
 ):
+    stake_f = _parse_float(stake, 10.0)
     sports = await list_sports()
     options = await upcoming_moneyline_options(sport_id=sport)
 
@@ -234,12 +287,12 @@ async def analyze(
 
     analysis = None
     if chosen_event_id and chosen_selection_id:
-        analysis = await analyze_selection(chosen_event_id, "moneyline", chosen_selection_id, model_key=model, stake=stake)
+        analysis = await analyze_selection(chosen_event_id, "moneyline", chosen_selection_id, model_key=model, stake=stake_f)
 
     return templates.TemplateResponse("analyze.html", {
         "request": request, "sports": sports, "options": options,
         "models": MODEL_REGISTRY, "analysis": analysis,
-        "filters": {"sport": sport, "event": chosen_event_id, "selection": chosen_selection_id, "model": model, "stake": stake},
+        "filters": {"sport": sport, "event": chosen_event_id, "selection": chosen_selection_id, "model": model, "stake": stake_f},
     })
 
 
@@ -294,13 +347,20 @@ async def simulate(
     sport: Optional[str] = "nba",
     strategy_id: str = "balanced",
     model: str = "synthetic_elo",
-    unit_size: float = 10.0,
-    win_probability: float = 55.0,
-    decimal_odds: float = 1.91,
-    stake: float = 10.0,
-    bets_per_trial: int = 50,
-    trials: int = 2000,
+    unit_size: Optional[str] = None,
+    win_probability: Optional[str] = None,
+    decimal_odds: Optional[str] = None,
+    stake: Optional[str] = None,
+    bets_per_trial: Optional[str] = None,
+    trials: Optional[str] = None,
 ):
+    unit_size_f = _parse_float(unit_size, 10.0)
+    win_probability_f = _parse_float(win_probability, 55.0)
+    decimal_odds_f = _parse_float(decimal_odds, 1.91)
+    stake_f = _parse_float(stake, 10.0)
+    bets_per_trial_i = _parse_int(bets_per_trial) or 50
+    trials_i = _parse_int(trials) or 2000
+
     sports = await list_sports()
     backtest_result = None
     mc_result = None
@@ -317,18 +377,18 @@ async def simulate(
                 sels = await provider.get_selections(m.id)
                 selections_by_market[m.id] = sels
                 odds_by_market[m.id] = await provider.get_odds(event_id=e.id, market_type=m.market_type)
-            outcomes_by_event[e.id] = {o.selection_id: o.result for o in provider._outcomes.get(e.id, [])}
+            outcomes_by_event[e.id] = {o.selection_id: o.result for o in provider.get_outcomes(e.id)}
 
         backtest_result = backtest_engine.run(
             events=events, markets_by_event=markets_by_event, selections_by_market=selections_by_market,
             odds_by_market=odds_by_market, outcomes_by_event=outcomes_by_event,
-            model=active_model, strategy=active_strategy, unit_size=unit_size,
+            model=active_model, strategy=active_strategy, unit_size=unit_size_f,
         )
     else:
-        p = max(0.001, min(0.999, win_probability / 100.0))
+        p = max(0.001, min(0.999, win_probability_f / 100.0))
         mc_result = run_monte_carlo(
-            win_probability=p, decimal_odds=decimal_odds, stake=stake,
-            bets_per_trial=max(1, bets_per_trial), trials=max(100, min(trials, 20000)),
+            win_probability=p, decimal_odds=decimal_odds_f, stake=stake_f,
+            bets_per_trial=max(1, bets_per_trial_i), trials=max(100, min(trials_i, 20000)),
         )
         if mc_result.return_distribution_sample:
             lo, hi = min(mc_result.return_distribution_sample), max(mc_result.return_distribution_sample)
@@ -339,9 +399,9 @@ async def simulate(
         "request": request, "sports": sports, "strategies": DEFAULT_STRATEGIES, "models": MODEL_REGISTRY,
         "backtest_result": backtest_result, "mc_result": mc_result,
         "filters": {
-            "mode": mode, "sport": sport, "strategy_id": strategy_id, "model": model, "unit_size": unit_size,
-            "win_probability": win_probability, "decimal_odds": decimal_odds, "stake": stake,
-            "bets_per_trial": bets_per_trial, "trials": trials,
+            "mode": mode, "sport": sport, "strategy_id": strategy_id, "model": model, "unit_size": unit_size_f,
+            "win_probability": win_probability_f, "decimal_odds": decimal_odds_f, "stake": stake_f,
+            "bets_per_trial": bets_per_trial_i, "trials": trials_i,
         },
     })
 
@@ -357,10 +417,14 @@ async def decide(
     selection: Optional[str] = None,
     strategy_id: str = "balanced",
     model: str = "synthetic_elo",
-    unit_size: float = 10.0,
-    bankroll: float = 1000.0,
-    kelly_fraction_pct: float = 50.0,
+    unit_size: Optional[str] = None,
+    bankroll: Optional[str] = None,
+    kelly_fraction_pct: Optional[str] = None,
 ):
+    unit_size_f = _parse_float(unit_size, 10.0)
+    bankroll_f = _parse_float(bankroll, 1000.0)
+    kelly_fraction_pct_f = _parse_float(kelly_fraction_pct, 50.0)
+
     sports = await list_sports()
     options = await upcoming_moneyline_options(sport_id=sport)
     active_strategy = _strategy_or_default(strategy_id)
@@ -375,7 +439,7 @@ async def decide(
     decision = None
     stakes = None
     if chosen_event_id and chosen_selection_id:
-        analysis = await analyze_selection(chosen_event_id, "moneyline", chosen_selection_id, model_key=model, stake=unit_size)
+        analysis = await analyze_selection(chosen_event_id, "moneyline", chosen_selection_id, model_key=model, stake=unit_size_f)
         if analysis and analysis["result"]:
             res = analysis["result"]
             market_prob = res.market_normalized_probability if res.market_normalized_probability is not None else res.market_implied_probability
@@ -392,10 +456,10 @@ async def decide(
             ))
             if res.model_probability is not None and res.decimal_odds:
                 stakes = {
-                    "fixed_unit": fixed_unit_stake(unit_size, active_strategy.max_stake_units),
-                    "percent_bankroll_2pct": percentage_bankroll_stake(bankroll, 0.02),
-                    "kelly_full": kelly_stake(bankroll, res.model_probability, res.decimal_odds, fraction=1.0),
-                    "kelly_fractional": kelly_stake(bankroll, res.model_probability, res.decimal_odds, fraction=kelly_fraction_pct / 100.0),
+                    "fixed_unit": fixed_unit_stake(unit_size_f, active_strategy.max_stake_units),
+                    "percent_bankroll_2pct": percentage_bankroll_stake(bankroll_f, 0.02),
+                    "kelly_full": kelly_stake(bankroll_f, res.model_probability, res.decimal_odds, fraction=1.0),
+                    "kelly_fractional": kelly_stake(bankroll_f, res.model_probability, res.decimal_odds, fraction=kelly_fraction_pct_f / 100.0),
                 }
 
     return templates.TemplateResponse("decide.html", {
@@ -403,8 +467,8 @@ async def decide(
         "models": MODEL_REGISTRY, "analysis": analysis, "decision": decision, "stakes": stakes,
         "filters": {
             "sport": sport, "event": chosen_event_id, "selection": chosen_selection_id,
-            "strategy_id": active_strategy.id, "model": model, "unit_size": unit_size,
-            "bankroll": bankroll, "kelly_fraction_pct": kelly_fraction_pct,
+            "strategy_id": active_strategy.id, "model": model, "unit_size": unit_size_f,
+            "bankroll": bankroll_f, "kelly_fraction_pct": kelly_fraction_pct_f,
         },
     })
 

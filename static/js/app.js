@@ -74,7 +74,7 @@
 })();
 
 /* ==========================================================================
-   Edge meter rendering — shared across Overview, Analyze, Decide, Simulator.
+   Edge meter rendering: shared across Overview, Analyze, Decide, Simulator.
    Renders a track from 0-1 with a marker for market probability and one
    for model probability, highlighting the gap between them as the edge.
    ========================================================================== */

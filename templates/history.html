@@ -4,13 +4,8 @@
 
 {% block content %}
 <div class="page-lede">
-  <p>Historical odds and outcomes preserve their original timestamps so they can be used for backtesting without look-ahead bias. See <a href="/simulate">Simulate</a> to run a strategy against this dataset.</p>
+  <p>Real, recently-completed games and their final results, live from The Odds API's free scores feed. That feed only looks back a few days, and doesn't include the historical price that was available at decision time, so a price column isn't shown here. See <a href="/simulate">Simulate</a> for Monte Carlo simulation, which doesn't need historical prices.</p>
 </div>
-
-{% set ds = data_status() %}
-{% if ds.mode == 'live' %}
-<div class="risk-banner"><span aria-hidden="true">ⓘ</span><span>Live odds are active for upcoming markets, but real-time providers on a free tier don't include historical odds. This history is SmartBet's sample dataset, not live data.</span></div>
-{% endif %}
 
 <form class="filter-bar" method="get" action="/history">
   <div class="filter-bar-search">
@@ -40,11 +35,11 @@
     </div>
     <div class="field">
       <label for="h-from">From</label>
-      <input type="date" id="h-from" name="date_from" value="{{ filters.date_from or '' }}" onchange="this.form.submit()">
+      <input type="date" id="h-from" name="date_from" value="{{ filters.date_from or '' }}" max="{{ today_iso() }}" onchange="this.form.submit()">
     </div>
     <div class="field">
       <label for="h-to">To</label>
-      <input type="date" id="h-to" name="date_to" value="{{ filters.date_to or '' }}" onchange="this.form.submit()">
+      <input type="date" id="h-to" name="date_to" value="{{ filters.date_to or '' }}" max="{{ today_iso() }}" onchange="this.form.submit()">
     </div>
     <div class="filter-bar-actions">
       <button class="btn btn-primary" type="submit">Apply filters</button>
@@ -55,12 +50,12 @@
 
 <div class="section">
   <div class="section-head">
-    <h2>Resolved events</h2>
+    <h2>Recent results</h2>
     <span class="eyebrow">{{ rows|length }} shown</span>
   </div>
 
   {% if not rows %}
-  <div class="empty-state">No historical events match these filters.</div>
+  <div class="empty-state">No completed games in the last few days match these filters. The live scores feed only covers a short recent window.</div>
   {% else %}
   <div class="table-wrap">
     <table>
@@ -70,13 +65,12 @@
       <tbody>
         {% for row in rows %}
         {% for sel in row.selections %}
-        {% set c = row.closing.get(sel.id) %}
         {% set result = row.outcomes.get(sel.id) %}
         <tr>
           <td>{{ row.event.away_team_name }} @ {{ row.event.home_team_name }}</td>
           <td>{{ row.event.start_time.strftime('%b %d, %Y') }}</td>
           <td>{{ sel.name }}</td>
-          <td class="num">{% if c %}{{ '%+.0f'|format(c.price) if c.price > 0 else '%.0f'|format(c.price) }}{% else %}—{% endif %}</td>
+          <td class="num" style="color:var(--text-faint); font-size:0.75rem;">Not available<sup title="Requires a historical-odds subscription; this integration's free tier doesn't include it.">†</sup></td>
           <td>
             {% if result == 'win' %}<span class="badge badge-signal">Win</span>
             {% elif result == 'loss' %}<span class="badge badge-fade">Loss</span>
@@ -89,6 +83,7 @@
       </tbody>
     </table>
   </div>
+  <p style="font-size:0.75rem; color:var(--text-faint); margin-top:0.5rem;">† Not fabricated: this column is genuinely unavailable on the free live-odds tier, rather than filled with a placeholder number.</p>
   {% endif %}
 </div>
 {% endblock %}

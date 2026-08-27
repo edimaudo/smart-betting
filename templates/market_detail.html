@@ -16,28 +16,16 @@
     <table>
       <thead>
         <tr>
-          <th>Selection</th><th>Sportsbook</th>
-          <th class="num">Opening</th><th class="num">Current</th><th>Movement</th>
+          <th>Selection</th><th>Sportsbook</th><th class="num">Price</th>
         </tr>
       </thead>
       <tbody>
         {% for entry in block.by_selection %}
-        {% set books = (entry.opening|map(attribute='sportsbook')|list + entry.current|map(attribute='sportsbook')|list)|unique|list %}
-        {% for book in books %}
-        {% set open_o = entry.opening|selectattr('sportsbook','equalto',book)|first %}
-        {% set cur_o = entry.current|selectattr('sportsbook','equalto',book)|first %}
+        {% for o in entry.current|sort(attribute='sportsbook') %}
         <tr>
           <td>{{ entry.selection.name }}</td>
-          <td>{{ book }}</td>
-          <td class="num">{% if open_o %}{{ '%+.0f'|format(open_o.price) if open_o.price > 0 else '%.0f'|format(open_o.price) }}{% else %}—{% endif %}</td>
-          <td class="num">{% if cur_o %}{{ '%+.0f'|format(cur_o.price) if cur_o.price > 0 else '%.0f'|format(cur_o.price) }}{% else %}—{% endif %}</td>
-          <td>
-            {% if open_o and cur_o %}
-              {% if cur_o.price > open_o.price %}<span class="badge badge-signal">Drifted out</span>
-              {% elif cur_o.price < open_o.price %}<span class="badge badge-fade">Shortened</span>
-              {% else %}<span class="badge badge-neutral">Unchanged</span>{% endif %}
-            {% else %}<span class="badge badge-neutral">—</span>{% endif %}
-          </td>
+          <td>{{ o.sportsbook }}</td>
+          <td class="num">{{ '%+.0f'|format(o.price) if o.price > 0 else '%.0f'|format(o.price) }}</td>
         </tr>
         {% endfor %}
         {% endfor %}
@@ -50,4 +38,6 @@
 {% if not market_blocks %}
 <div class="empty-state">No market data available for this event.</div>
 {% endif %}
+
+<p style="font-size:0.75rem; color:var(--text-faint);">This live odds feed provides a current snapshot only; opening-line and price-movement history aren't available on this data tier.</p>
 {% endblock %}

@@ -47,15 +47,13 @@
 
       {% set ds = data_status() %}
       <p class="sidebar-footer">
-        <span class="badge {{ 'badge-signal' if ds.mode == 'live' else 'badge-neutral' }}" style="margin-bottom:0.5rem;">
-          {{ 'Live odds' if ds.mode == 'live' else 'Sample data' }}
+        <span class="badge {{ 'badge-signal' if ds.mode == 'live' else 'badge-warn' }}" style="margin-bottom:0.5rem;">
+          {{ 'Live odds active' if ds.mode == 'live' else 'Not configured' }}
         </span><br>
         {% if ds.mode == 'live' %}
           Real sportsbook odds via The Odds API.
-        {% elif ds.configured %}
-          A live data key is set, but the last request failed, so this is showing sample data. See server logs.
         {% else %}
-          No ODDS_API_KEY configured, so this is showing deterministic sample data. See README to enable live odds.
+          No ODDS_API_KEY set. This app uses live data only, with no sample-data fallback; see the setup steps shown on any data page.
         {% endif %}
         Not a guarantee of outcomes. Betting involves financial risk; see <a href="/learn">Learn</a>.
       </p>

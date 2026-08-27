@@ -1,41 +1,47 @@
 """
-Live data provider — real sportsbook odds via The Odds API.
+Live data provider: real sportsbook odds via The Odds API. This is the
+ONLY data source in this app; there is no sample/mock data fallback.
 
 Honest scope of what "live" means here, since this matters a lot in a
 betting app:
 
   * EVENTS + ODDS (moneyline / spread / total, across real sportsbooks)
-    are genuinely live when `ODDS_API_KEY` is set: this calls
-    https://the-odds-api.com/'s public v4 REST API directly, no mock
-    data involved.
-  * HISTORICAL results/backtesting data is NOT included: The Odds
-    API's free tier does not expose historical odds (that's a separate
-    paid add-on). `get_historical_data` / `get_finished_events` return
-    an empty list in live mode rather than silently substituting fake
-    history — see the "no free historical odds" note surfaced in the
-    UI (Simulate/History pages) when running in live mode.
-  * This means the Elo model (app/models/prediction.py) has nothing to
-    learn from in live mode and will sit at a neutral rating (roughly
-    a coin flip + home-field advantage) until a historical results feed
-    is connected. That's a real, disclosed limitation, not a bug.
+    are genuinely live: this calls https://the-odds-api.com/'s public v4
+    REST API directly.
+  * RECENT RESULTS are also real and live, via the free `/scores`
+    endpoint, but limited to completed events from the last few days
+    (the free tier's `daysFrom` maximum is 3). This powers History and
+    the Elo model's rating build.
+  * What that endpoint does NOT include is the historical PRICE (odds)
+    that was available at decision time for those completed games;
+    that's a separate paid "historical odds" add-on this integration
+    does not have. Because a real backtest needs to know the price at
+    decision time, Simulate's Backtest mode is disabled with an honest
+    explanation rather than run against fabricated prices. History
+    shows the real final results but marks the closing-price column as
+    unavailable rather than inventing a number.
+  * The Elo model (app/models/prediction.py) trains on whatever recent
+    real results are available (up to ~3 days per sport), which is a
+    real but small sample; see its own docstring for that caveat.
+
+If ODDS_API_KEY is missing or a request fails, every method here raises
+LiveDataUnavailable rather than returning fabricated data; app-level
+code (main.py) turns that into a clear, honest error page.
 
 Get a free API key (500 requests/month on the free tier) at
 https://the-odds-api.com/ and set it as the ODDS_API_KEY environment
-variable before starting the app to enable this provider — see
-README.md.
+variable before starting the app — see README.md.
 
 Note on how this was verified: this environment's outbound network
 access turned out to reach api.the-odds-api.com directly, so the HTTP
-request below was exercised against the real, live endpoint — with a
+request below was exercised against the real, live endpoint. With a
 placeholder key it correctly received a genuine 403 from their server
 (not a connection failure), confirming the URL/params/request shape
 are well-formed. What was NOT verified is a full successful 200
-response, since that requires an actual paid/free-tier key this
-environment doesn't have. Response *parsing* is covered independently
-by `tests/test_live_provider.py` against a fixture payload shaped
-exactly like the documented v4 schema. Point a real key at it and it
-should work; if The Odds API ever changes its schema, `_build_markets_and_odds`
-below is the one place that would need updating.
+response, since that requires an actual key this environment doesn't
+have. Response *parsing* is covered independently by
+`tests/test_live_provider.py` against fixture payloads shaped exactly
+like the documented v4 schema.
 """
 from __future__ import annotations
 
@@ -92,6 +98,11 @@ class TheOddsApiProvider(SportsDataProvider):
         self._cache: dict[str, tuple[float, list[dict]]] = {}
         # event_id -> raw event json, populated as sports are fetched
         self._events_raw: dict[str, dict] = {}
+        # Real recent-results cache, from the free /scores endpoint.
+        # sport_id -> fetched_at_epoch
+        self._scores_fetched_at: dict[str, float] = {}
+        self._finished_events_cache: dict[str, list[Event]] = {}
+        self._outcomes_cache: dict[str, list[Outcome]] = {}
 
     async def _raw_events(self, sport_id: str) -> list[dict]:
         cached = self._cache.get(sport_id)
@@ -270,15 +281,90 @@ class TheOddsApiProvider(SportsDataProvider):
                     results.append(o)
         return results
 
+    async def ensure_scores_loaded(self, sport_id: str, days_from: int = 3) -> None:
+        """Fetch real, recently-completed results for one sport from the
+        free `/scores` endpoint (max `daysFrom=3` on the free tier) and
+        populate the finished-events/outcomes caches from them."""
+        now = time.time()
+        fetched_at = self._scores_fetched_at.get(sport_id)
+        if fetched_at and (now - fetched_at) < _CACHE_TTL_SECONDS:
+            return
+
+        sport_key = SPORT_KEYS.get(sport_id)
+        if not sport_key:
+            return
+
+        url = f"{ODDS_API_BASE}/sports/{sport_key}/scores"
+        params = {"apiKey": self._api_key, "daysFrom": min(max(days_from, 1), 3), "dateFormat": "iso"}
+        try:
+            resp = await self._client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise LiveDataUnavailable(f"The Odds API scores request failed: {exc}") from exc
+
+        finished_events: list[Event] = []
+        outcomes_by_event: dict[str, list[Outcome]] = {}
+
+        for raw in data:
+            if not raw.get("completed"):
+                continue
+            scores = raw.get("scores")
+            home_name, away_name = raw.get("home_team"), raw.get("away_team")
+            if not scores or not home_name or not away_name:
+                continue
+            score_by_name = {s.get("name"): s.get("score") for s in scores if s.get("score") is not None}
+            if home_name not in score_by_name or away_name not in score_by_name:
+                continue
+            try:
+                home_score = float(score_by_name[home_name])
+                away_score = float(score_by_name[away_name])
+            except (TypeError, ValueError):
+                continue
+
+            event = Event(
+                id=raw["id"], sport_id=sport_id, league_id=f"{sport_id}-live",
+                home_team_id=_slugify(home_name) or "home", away_team_id=_slugify(away_name) or "away",
+                start_time=datetime.fromisoformat(raw["commence_time"].replace("Z", "+00:00")),
+                status=EventStatus.FINAL, home_team_name=home_name, away_team_name=away_name,
+                league_name=SPORT_NAMES.get(sport_id, sport_id.upper()), sport_name=SPORT_NAMES.get(sport_id, sport_id.upper()),
+            )
+            finished_events.append(event)
+
+            market_id = f"{event.id}-mkt-moneyline"
+            ts = datetime.now(timezone.utc)
+            if home_score > away_score:
+                home_result, away_result = "win", "loss"
+            elif home_score < away_score:
+                home_result, away_result = "loss", "win"
+            else:
+                home_result, away_result = "push", "push"
+            outcomes_by_event[event.id] = [
+                Outcome(id=f"{market_id}-sel-0-outcome", event_id=event.id, selection_id=f"{market_id}-sel-0", result=home_result, timestamp=ts),
+                Outcome(id=f"{market_id}-sel-1-outcome", event_id=event.id, selection_id=f"{market_id}-sel-1", result=away_result, timestamp=ts),
+            ]
+
+        self._finished_events_cache[sport_id] = sorted(finished_events, key=lambda e: e.start_time)
+        self._outcomes_cache.update(outcomes_by_event)
+        self._scores_fetched_at[sport_id] = now
+
     async def get_historical_data(
         self,
         sport_id: Optional[str] = None,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
     ) -> list[Outcome]:
-        # The Odds API's free tier has no historical odds endpoint. Return
-        # an empty list rather than fabricating history — see module docstring.
-        return []
+        sport_ids = [sport_id] if sport_id else list(SPORT_KEYS.keys())
+        results: list[Outcome] = []
+        for sid in sport_ids:
+            await self.ensure_scores_loaded(sid)
+            for event in self.get_finished_events(sport_id=sid):
+                if start_date and event.start_time.date() < start_date:
+                    continue
+                if end_date and event.start_time.date() > end_date:
+                    continue
+                results.extend(self.get_outcomes(event.id))
+        return results
 
     # ------------------------------------------------------------------
     # Convenience accessors (match MockSportsDataProvider's extra surface
@@ -295,8 +381,27 @@ class TheOddsApiProvider(SportsDataProvider):
         return team_id.replace("-", " ").title()
 
     def get_finished_events(self, sport_id: Optional[str] = None) -> list[Event]:
-        # No free historical feed — see module docstring.
-        return []
+        if sport_id:
+            return list(self._finished_events_cache.get(sport_id, []))
+        all_events: list[Event] = []
+        for events in self._finished_events_cache.values():
+            all_events.extend(events)
+        return sorted(all_events, key=lambda e: e.start_time)
 
     def get_outcomes(self, event_id: str) -> list[Outcome]:
-        return []
+        return list(self._outcomes_cache.get(event_id, []))
+
+    @staticmethod
+    def finished_event_selections(event: Event) -> list[Selection]:
+        """Synthesize the two moneyline selections for a finished event.
+        Real completed games aren't present in the /odds endpoint cache
+        anymore, so there's no live market/selection payload for them;
+        this only needs to produce display names + ids matching the
+        `{event.id}-mkt-moneyline-sel-{0,1}` convention used by
+        ensure_scores_loaded()'s outcomes, so History can label rows and
+        the Elo model can match selections to results."""
+        market_id = f"{event.id}-mkt-moneyline"
+        return [
+            Selection(id=f"{market_id}-sel-0", market_id=market_id, name=event.home_team_name or "Home"),
+            Selection(id=f"{market_id}-sel-1", market_id=market_id, name=event.away_team_name or "Away"),
+        ]

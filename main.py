@@ -18,7 +18,8 @@ from fastapi.templating import Jinja2Templates
 from app.api import router as api_router
 from app.calculations.odds import to_decimal
 from app.calculations.stake import fixed_unit_stake, kelly_stake, percentage_bankroll_stake
-from app.data import provider
+from app.data import CONFIGURED, provider
+from app.data.live_provider import LiveDataUnavailable
 from app.decision.engine import DecisionEngine, DecisionInput
 from app.models.entities import EventStatus, Strategy
 from app.models.prediction import MODEL_REGISTRY
@@ -30,7 +31,6 @@ from app.services.view_helpers import (
     upcoming_moneyline_options,
 )
 from app.strategies.engine import DEFAULT_STRATEGIES, engine as strategy_engine
-from app.simulation.backtest import BacktestEngine
 from app.simulation.monte_carlo import run_monte_carlo
 
 app = FastAPI(title="SmartBet")
@@ -38,12 +38,17 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(api_router)
 
 templates = Jinja2Templates(directory="templates")
-templates.env.globals["data_status"] = lambda: {
-    "mode": provider.mode, "configured": provider.configured, "error": provider.last_error,
-}
+templates.env.globals["data_status"] = lambda: {"mode": "live" if CONFIGURED else "unconfigured", "configured": CONFIGURED}
+templates.env.globals["today_iso"] = lambda: date.today().isoformat()
+
+
+@app.exception_handler(LiveDataUnavailable)
+async def live_data_unavailable_handler(request: Request, exc: LiveDataUnavailable):
+    return templates.TemplateResponse(
+        "data_unavailable.html", {"request": request, "reason": str(exc)}, status_code=503,
+    )
 
 decision_engine = DecisionEngine()
-backtest_engine = BacktestEngine(decision_engine)
 
 STRATEGIES_BY_ID: dict[str, Strategy] = {s.id: s for s in DEFAULT_STRATEGIES}
 
@@ -53,7 +58,7 @@ def _strategy_or_default(strategy_id: Optional[str]) -> Strategy:
 
 
 # ----------------------------------------------------------------------------
-# Query params arrive as plain strings from HTML forms — including an empty
+# Query params arrive as plain strings from HTML forms, including an empty
 # string "" for any <select> left on "All ..." or a cleared date/number
 # field. FastAPI's typed Optional[date]/Optional[int] params reject "" as
 # invalid and return a raw 422 JSON error instead of the page, so every
@@ -87,6 +92,23 @@ def _parse_float(value: Optional[str], default: float) -> float:
         return default
 
 
+# ----------------------------------------------------------------------------
+# Date bounds: Overview/Markets only ever show upcoming (scheduled) events, so
+# a "date" filter there can never usefully be in the past. History only ever
+# shows resolved (past) events, so its date_from/date_to can never usefully be
+# in the future. Both directions are clamped here (not just via the <input
+# max/min attributes in the templates, which a hand-built URL can bypass).
+# ----------------------------------------------------------------------------
+def _clamp_not_before_today(d: Optional[date]) -> Optional[date]:
+    today = date.today()
+    return today if (d is not None and d < today) else d
+
+
+def _clamp_not_after_today(d: Optional[date]) -> Optional[date]:
+    today = date.today()
+    return today if (d is not None and d > today) else d
+
+
 # ============================================================================
 # 1. Overview
 # ============================================================================
@@ -98,7 +120,7 @@ async def overview(
     market_type: str = "moneyline",
     q: Optional[str] = None,
 ):
-    on_date = _parse_date(date)
+    on_date = _clamp_not_before_today(_parse_date(date))
     sports = await list_sports()
     events = await list_events(
         sport_id=sport, on_date=on_date, search=q, status=EventStatus.SCHEDULED, limit=24,
@@ -152,7 +174,7 @@ async def markets(
     q: Optional[str] = None,
     sportsbook: Optional[str] = None,
 ):
-    on_date = _parse_date(date)
+    on_date = _clamp_not_before_today(_parse_date(date))
     sports = await list_sports()
     events = await list_events(
         sport_id=sport, on_date=on_date, search=q, status=EventStatus.SCHEDULED, limit=40,
@@ -196,15 +218,9 @@ async def market_detail(request: Request, event_id: str):
         market, selections, odds = await get_market_bundle(event_id, mt)
         if not market:
             continue
-        opening = [o for o in odds if o.is_opening]
-        current = [o for o in odds if not o.is_opening]
         by_selection = []
         for sel in selections:
-            by_selection.append({
-                "selection": sel,
-                "opening": [o for o in opening if o.selection_id == sel.id],
-                "current": [o for o in current if o.selection_id == sel.id],
-            })
+            by_selection.append({"selection": sel, "current": [o for o in odds if o.selection_id == sel.id]})
         market_blocks.append({"market": market, "by_selection": by_selection})
 
     return templates.TemplateResponse("market_detail.html", {
@@ -225,11 +241,14 @@ async def history(
     date_to: Optional[str] = None,
 ):
     season_i = _parse_int(season)
-    from_d = _parse_date(date_from)
-    to_d = _parse_date(date_to)
+    from_d = _clamp_not_after_today(_parse_date(date_from))
+    to_d = _clamp_not_after_today(_parse_date(date_to))
 
     sports = await list_sports()
-    events = await list_events(sport_id=sport, status=EventStatus.FINAL, limit=500)
+    sport_ids = [sport] if sport else ["nba", "nfl", "epl"]
+    for sid in sport_ids:
+        await provider.ensure_scores_loaded(sid)
+    events = provider.get_finished_events(sport_id=sport)
 
     if season_i:
         events = [e for e in events if e.start_time.year == season_i]
@@ -245,17 +264,11 @@ async def history(
 
     rows = []
     for event in events:
-        market, selections, odds = await get_market_bundle(event.id, "moneyline")
-        if not market:
-            continue
-        closing = {o.selection_id: o for o in odds if o.is_closing}
+        selections = provider.finished_event_selections(event)
         outcomes = {o.selection_id: o.result for o in provider.get_outcomes(event.id)}
-        rows.append({
-            "event": event, "selections": selections,
-            "closing": closing, "outcomes": outcomes,
-        })
+        rows.append({"event": event, "selections": selections, "outcomes": outcomes})
 
-    seasons = sorted({e.start_time.year for e in await list_events(status=EventStatus.FINAL, limit=500)}, reverse=True)
+    seasons = sorted({e.start_time.year for e in provider.get_finished_events()}, reverse=True)
 
     return templates.TemplateResponse("history.html", {
         "request": request, "sports": sports, "rows": rows, "seasons": seasons,
@@ -361,28 +374,23 @@ async def simulate(
     bets_per_trial_i = _parse_int(bets_per_trial) or 50
     trials_i = _parse_int(trials) or 2000
 
-    sports = await list_sports()
     backtest_result = None
+    backtest_unavailable_reason = None
     mc_result = None
 
     if mode == "backtest":
-        active_strategy = _strategy_or_default(strategy_id)
-        active_model = MODEL_REGISTRY.get(model, MODEL_REGISTRY["synthetic_elo"])
-        events = provider.get_finished_events(sport_id=sport)
-        markets_by_event, selections_by_market, odds_by_market, outcomes_by_event = {}, {}, {}, {}
-        for e in events:
-            mkts = await provider.get_markets(e.id)
-            markets_by_event[e.id] = mkts
-            for m in mkts:
-                sels = await provider.get_selections(m.id)
-                selections_by_market[m.id] = sels
-                odds_by_market[m.id] = await provider.get_odds(event_id=e.id, market_type=m.market_type)
-            outcomes_by_event[e.id] = {o.selection_id: o.result for o in provider.get_outcomes(e.id)}
-
-        backtest_result = backtest_engine.run(
-            events=events, markets_by_event=markets_by_event, selections_by_market=selections_by_market,
-            odds_by_market=odds_by_market, outcomes_by_event=outcomes_by_event,
-            model=active_model, strategy=active_strategy, unit_size=unit_size_f,
+        # A real backtest needs the price that was available at decision
+        # time for each historical bet. The live provider's free tier has
+        # no historical-odds endpoint (only real recent final scores via
+        # /scores, used for History and the Elo model) — so rather than
+        # backtest against a fabricated or substituted price, this mode
+        # is disabled with an honest explanation. See README.md.
+        backtest_unavailable_reason = (
+            "Backtesting needs the odds that were actually available at the time of each "
+            "historical bet. This app's live data source (The Odds API) only exposes that "
+            "on a separate paid historical-odds add-on it doesn't have, so rather than "
+            "substitute a fabricated price, backtesting is disabled here. Monte Carlo "
+            "simulation below doesn't need historical prices and is fully available."
         )
     else:
         p = max(0.001, min(0.999, win_probability_f / 100.0))
@@ -396,8 +404,8 @@ async def simulate(
             mc_result.bars = [round(((v - lo) / span) * 100, 1) for v in mc_result.return_distribution_sample]
 
     return templates.TemplateResponse("simulate.html", {
-        "request": request, "sports": sports, "strategies": DEFAULT_STRATEGIES, "models": MODEL_REGISTRY,
-        "backtest_result": backtest_result, "mc_result": mc_result,
+        "request": request, "strategies": DEFAULT_STRATEGIES, "models": MODEL_REGISTRY,
+        "backtest_result": backtest_result, "backtest_unavailable_reason": backtest_unavailable_reason, "mc_result": mc_result,
         "filters": {
             "mode": mode, "sport": sport, "strategy_id": strategy_id, "model": model, "unit_size": unit_size_f,
             "win_probability": win_probability_f, "decimal_odds": decimal_odds_f, "stake": stake_f,

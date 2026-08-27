@@ -105,6 +105,7 @@ async def analyze_selection(
     snapshot = MarketSnapshot(target_selection_id=selection_id, best_odds=best, all_selection_odds=current_by_sel)
 
     model = MODEL_REGISTRY.get(model_key, MODEL_REGISTRY["synthetic_elo"])
+    await model.ensure_ready(provider)
     is_home = selection_id.endswith("-sel-0")
     model_output = model.predict({
         "selection_odds": current_by_sel,

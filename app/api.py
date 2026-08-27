@@ -21,13 +21,11 @@ from app.decision.engine import DecisionEngine, DecisionInput
 from app.models.entities import EventStatus
 from app.models.prediction import MODEL_REGISTRY
 from app.services.view_helpers import analyze_selection, get_market_bundle, list_events, list_sports
-from app.simulation.backtest import BacktestEngine
 from app.simulation.monte_carlo import run_monte_carlo
 from app.strategies.engine import DEFAULT_STRATEGIES
 
 router = APIRouter(prefix="/api", tags=["api"])
 decision_engine = DecisionEngine()
-backtest_engine = BacktestEngine(decision_engine)
 STRATEGIES_BY_ID = {s.id: s for s in DEFAULT_STRATEGIES}
 
 
@@ -144,30 +142,19 @@ async def api_decisions(
 
 @router.get("/simulations/backtest")
 async def api_backtest(sport: str = "nba", strategy_id: str = "balanced", model: str = "synthetic_elo", unit_size: float = 10.0):
-    strategy = STRATEGIES_BY_ID.get(strategy_id)
-    if not strategy:
-        raise HTTPException(status_code=400, detail=f"Unknown strategy_id '{strategy_id}'.")
-    active_model = MODEL_REGISTRY.get(model)
-    if not active_model:
-        raise HTTPException(status_code=400, detail=f"Unknown model '{model}'.")
-
-    events = provider.get_finished_events(sport_id=sport)
-    markets_by_event, selections_by_market, odds_by_market, outcomes_by_event = {}, {}, {}, {}
-    for e in events:
-        mkts = await provider.get_markets(e.id)
-        markets_by_event[e.id] = mkts
-        for m in mkts:
-            sels = await provider.get_selections(m.id)
-            selections_by_market[m.id] = sels
-            odds_by_market[m.id] = await provider.get_odds(event_id=e.id, market_type=m.market_type)
-        outcomes_by_event[e.id] = {o.selection_id: o.result for o in provider.get_outcomes(e.id)}
-
-    result = backtest_engine.run(
-        events=events, markets_by_event=markets_by_event, selections_by_market=selections_by_market,
-        odds_by_market=odds_by_market, outcomes_by_event=outcomes_by_event,
-        model=active_model, strategy=strategy, unit_size=unit_size,
+    # A real backtest needs the odds available at each historical decision
+    # point. The live provider's free tier has no historical-odds endpoint
+    # (only real recent final scores via /scores), so rather than run this
+    # against fabricated or missing prices, it's disabled with an honest
+    # error. See main.py's /simulate route and README.md for the same note.
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Backtesting is unavailable: it requires historical odds data, which this "
+            "app's live data source doesn't provide on its free tier. Use "
+            "/api/simulations/monte-carlo instead, which doesn't need historical prices."
+        ),
     )
-    return {"result": _asdict(result)}
 
 
 @router.get("/simulations/monte-carlo")

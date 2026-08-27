@@ -5,11 +5,11 @@ PRD section 20: models implement a common interface and must expose
 their assumptions. PRD section 13: the system supports multiple
 analytical model categories rather than a single prediction model.
 
-These are intentionally simple, transparent reference
-implementations — not production-grade forecasting models. Swapping
-in a more sophisticated model (regression, gradient boosting, a
-proper Elo pipeline fit on real results, etc.) only requires
-implementing `BettingModel.predict`.
+MarketConsensusModel is an intentionally simple, transparent baseline.
+EloRatingModel is a real Elo pipeline trained on the live provider's
+actual recent results (see its own docstring for scope/limitations).
+Swapping in a further model (regression, gradient boosting, etc.) only
+requires implementing `BettingModel.predict`.
 """
 from __future__ import annotations
 
@@ -25,6 +25,12 @@ class BettingModel(ABC):
 
     name: str = "base-model"
     assumptions: list[str] = []
+
+    async def ensure_ready(self, provider) -> None:
+        """Optional async warm-up hook, called before predict() by
+        view_helpers.analyze_selection(). Models with no external state
+        to load (e.g. MarketConsensusModel) can leave this as a no-op."""
+        return None
 
     @abstractmethod
     def predict(self, data: dict) -> ModelOutput:
@@ -95,47 +101,51 @@ class EloRatingModel(BettingModel):
     A real, functioning Elo rating model.
 
     Every team starts at a base rating of 1500. Ratings are built by
-    replaying every resolved event in this environment's dataset in
-    chronological order and applying the standard logistic Elo update
-    after each result -- this is a genuine Elo pipeline, not a
-    placeholder. Predictions for an upcoming matchup use each team's
-    current (post-history) rating.
+    replaying real, completed games (from the live provider's /scores
+    endpoint, via ensure_ready()) in chronological order and applying
+    the standard logistic Elo update after each result: this is a
+    genuine Elo pipeline, not a placeholder. Predictions for an
+    upcoming matchup use each team's current rating.
 
-    The one honest caveat: this MVP has no live sports history
-    connected, so the results this model learns from are the same
-    generated dataset used everywhere else in the app, not real-world
-    results. Point it at a real historical results feed (via
-    `build_from_results`) and the same Elo math applies unchanged.
+    The one honest caveat: the free tier's /scores endpoint only looks
+    back ~3 days, so this trains on a real but small recent sample
+    rather than a full season. A team that hasn't played recently sits
+    at the neutral base rating until it does.
     """
     name = "Elo Rating Model"
     assumptions = [
         "Uses a real, standard Elo rating update (K=20), replayed "
-        "chronologically over every resolved event in this environment's "
-        "dataset -- the rating math itself is genuine, not a placeholder.",
-        "This MVP has no live sports history connected, so it is trained "
-        "on this environment's generated results rather than real-world "
-        "outcomes -- swap in a real results feed to change that.",
+        "chronologically over every completed game the live data "
+        "provider has: the rating math itself is genuine, not a "
+        "placeholder.",
+        "The live odds provider's free tier only exposes completed "
+        "games from roughly the last 3 days (its /scores endpoint), so "
+        "ratings are built from a real but small recent sample, not a "
+        "full season: treat early-season or rarely-played teams' "
+        "ratings as low-confidence.",
         "Applies a fixed home-field advantage (+65 rating points) and "
         "ignores injuries, rest, and other matchup-specific context.",
-        "Confidence scales with how many historical results informed "
-        "each team's current rating (more games -> higher confidence).",
+        "Confidence scales with how many recent results informed each "
+        "team's current rating (more games -> higher confidence).",
     ]
 
     K_FACTOR = 20.0
     HOME_ADVANTAGE = 65.0
     BASE_RATING = 1500.0
+    SPORTS = ("nba", "nfl", "epl")
 
     def __init__(self) -> None:
         self._ratings: dict[str, float] = {}
         self._games_played: dict[str, int] = {}
-        self._built = False
 
     def build_from_results(self, games: list[tuple[str, str, float]]) -> None:
         """
         Replay a chronological list of (home_team_id, away_team_id,
         home_score_fraction) results, where home_score_fraction is 1.0
         for a home win, 0.0 for an away win, or 0.5 for a push/draw.
-        Idempotent to call again with a fuller history.
+        Assumes self._ratings/_games_played start fresh (see
+        ensure_ready, which resets them before calling this) so the
+        same result is never double-counted.
         """
         for home_id, away_id, actual_home in games:
             r_home = self._ratings.get(home_id, self.BASE_RATING)
@@ -147,19 +157,19 @@ class EloRatingModel(BettingModel):
 
             self._games_played[home_id] = self._games_played.get(home_id, 0) + 1
             self._games_played[away_id] = self._games_played.get(away_id, 0) + 1
-        self._built = True
 
-    def _ensure_built(self) -> None:
-        if self._built:
-            return
-        # Lazy self-build from this environment's mock provider so the
-        # model works out of the box. A production deployment would call
-        # `build_from_results(...)` explicitly with real historical data
-        # at startup instead of relying on this fallback.
-        from app.data import provider
-
+    async def ensure_ready(self, provider) -> None:
+        """Refresh ratings from the live provider's real, recent
+        completed-game results. Cheap to call on every request: the
+        provider's own TTL cache means this only makes a real HTTP
+        request every few minutes per sport, and the games list is
+        small (a few days' worth), so a full rebuild each time is both
+        correct (no double-counting) and inexpensive."""
+        self._ratings = {}
+        self._games_played = {}
         games: list[tuple[str, str, float]] = []
-        for sport in sorted(provider._teams.keys()):
+        for sport in self.SPORTS:
+            await provider.ensure_scores_loaded(sport)
             for event in provider.get_finished_events(sport_id=sport):
                 outcomes = provider.get_outcomes(event.id)
                 home_sel_id = f"{event.id}-mkt-moneyline-sel-0"
@@ -171,11 +181,9 @@ class EloRatingModel(BettingModel):
         self.build_from_results(games)
 
     def rating_for(self, team_id: str) -> float:
-        self._ensure_built()
         return self._ratings.get(team_id, self.BASE_RATING)
 
     def predict(self, data: dict) -> ModelOutput:
-        self._ensure_built()
         home_team_id: str = data["home_team_id"]
         away_team_id: str = data["away_team_id"]
         target_is_home: bool = data["target_is_home"]

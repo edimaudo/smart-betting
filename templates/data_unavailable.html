@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Live data unavailable{% endblock %}
+{% block page_title %}Live data unavailable{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:640px;">
+  <h2 style="margin-top:0;">This page needs live data, and couldn't get it</h2>
+  <p>{{ reason }}</p>
+
+  <h3>To fix this</h3>
+  <ol style="color:var(--text-dim); line-height:1.8;">
+    <li>Get a free API key at <a href="https://the-odds-api.com/" target="_blank" rel="noopener">the-odds-api.com</a> (no credit card, 500 requests/month).</li>
+    <li>Set it as an environment variable: <code class="mono">export ODDS_API_KEY=your-key-here</code></li>
+    <li>Restart the app: <code class="mono">uvicorn main:app --reload</code></li>
+  </ol>
+
+  <p style="margin-top:1.5rem;"><a class="btn btn-primary" href="/">Try again</a></p>
+</div>
+{% endblock %}

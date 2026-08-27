@@ -140,12 +140,21 @@ def test_odds_are_tagged_with_provenance(live_provider):
     assert any_odds.odds_format.value == "american"
 
 
-def test_no_historical_data_is_fabricated():
+def test_failed_live_call_raises_rather_than_fabricating_data():
+    """With no mocked HTTP layer, this hits the real API with a fake key.
+    It must raise LiveDataUnavailable (a real 403 from their server) —
+    never silently substitute empty/fake historical data."""
     import asyncio
 
+    from app.data.live_provider import LiveDataUnavailable
+
     provider = TheOddsApiProvider(api_key="test-key-not-real")
-    result = asyncio.run(provider.get_historical_data(sport_id="nba"))
-    assert result == []
+    with pytest.raises(LiveDataUnavailable):
+        asyncio.run(provider.get_historical_data(sport_id="nba"))
+
+    # Caches are empty before any successful fetch, which is a distinct,
+    # honest "not loaded yet" state — not to be confused with "confirmed
+    # no results". Callers must call ensure_scores_loaded() first.
     assert provider.get_finished_events(sport_id="nba") == []
     assert provider.get_outcomes("any-event-id") == []
 
@@ -155,3 +164,107 @@ def test_missing_api_key_raises():
 
     with pytest.raises(LiveDataUnavailable):
         TheOddsApiProvider(api_key="")
+
+
+FIXTURE_SCORES = [
+    {
+        "id": "score-fixture-001",
+        "sport_key": "basketball_nba",
+        "commence_time": "2026-08-23T23:00:00Z",
+        "completed": True,
+        "home_team": "Los Angeles Lakers",
+        "away_team": "Denver Nuggets",
+        "scores": [
+            {"name": "Los Angeles Lakers", "score": "110"},
+            {"name": "Denver Nuggets", "score": "104"},
+        ],
+        "last_update": "2026-08-24T02:00:00Z",
+    },
+    {
+        # Not completed yet: must be skipped entirely.
+        "id": "score-fixture-002",
+        "sport_key": "basketball_nba",
+        "commence_time": "2026-08-25T23:00:00Z",
+        "completed": False,
+        "home_team": "Boston Celtics",
+        "away_team": "Miami Heat",
+        "scores": None,
+    },
+]
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._payload
+
+
+def _patch_scores_endpoint(monkeypatch, provider, payload=FIXTURE_SCORES):
+    async def fake_get(url, params=None):
+        assert "/scores" in url
+        return _FakeResponse(payload)
+
+    monkeypatch.setattr(provider._client, "get", fake_get)
+
+
+def test_ensure_scores_loaded_parses_real_completed_games(live_provider, monkeypatch):
+    import asyncio
+
+    _patch_scores_endpoint(monkeypatch, live_provider)
+    asyncio.run(live_provider.ensure_scores_loaded("nba"))
+    finished = live_provider.get_finished_events(sport_id="nba")
+
+    assert len(finished) == 1  # the incomplete game must be excluded
+    event = finished[0]
+    assert event.id == "score-fixture-001"
+    assert event.status.value == "final"
+    assert event.home_team_name == "Los Angeles Lakers"
+
+
+def test_ensure_scores_loaded_derives_correct_win_loss(live_provider, monkeypatch):
+    import asyncio
+
+    _patch_scores_endpoint(monkeypatch, live_provider)
+    asyncio.run(live_provider.ensure_scores_loaded("nba"))
+    outcomes = live_provider.get_outcomes("score-fixture-001")
+    results_by_selection = {o.selection_id: o.result for o in outcomes}
+
+    # Lakers (home, sel-0) scored higher, so home wins / away loses.
+    assert results_by_selection["score-fixture-001-mkt-moneyline-sel-0"] == "win"
+    assert results_by_selection["score-fixture-001-mkt-moneyline-sel-1"] == "loss"
+
+
+def test_get_historical_data_respects_date_range(live_provider, monkeypatch):
+    import asyncio
+    from datetime import date as date_cls
+
+    _patch_scores_endpoint(monkeypatch, live_provider)
+
+    # The fixture's completed game is on 2026-08-23.
+    in_range = asyncio.run(live_provider.get_historical_data(sport_id="nba", start_date=date_cls(2026, 8, 20), end_date=date_cls(2026, 8, 25)))
+    assert len(in_range) == 2  # two selections' worth of outcomes
+
+    out_of_range = asyncio.run(live_provider.get_historical_data(sport_id="nba", start_date=date_cls(2026, 1, 1), end_date=date_cls(2026, 1, 2)))
+    assert out_of_range == []
+
+
+def test_finished_event_selections_match_outcome_selection_ids():
+    from datetime import datetime as dt_cls, timezone as tz
+
+    from app.models.entities import Event as EventModel
+    from app.models.entities import EventStatus as EventStatusEnum
+
+    event = EventModel(
+        id="evt-x", sport_id="nba", league_id="nba-live", home_team_id="a", away_team_id="b",
+        start_time=dt_cls.now(tz.utc), status=EventStatusEnum.FINAL,
+        home_team_name="Team A", away_team_name="Team B",
+    )
+    selections = TheOddsApiProvider.finished_event_selections(event)
+    assert selections[0].id == "evt-x-mkt-moneyline-sel-0"
+    assert selections[0].name == "Team A"
+    assert selections[1].id == "evt-x-mkt-moneyline-sel-1"
